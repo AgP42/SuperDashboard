@@ -76,6 +76,8 @@ export interface DashboardConfig {
   theme: Theme;
   layout: Layout;
   textScale: TextScale;
+  /** Zone-title size, independent from the content text ('S' = the historical look). */
+  headingScale: TextScale;
   zones: Zone[];
 }
 
@@ -85,6 +87,7 @@ export const DEFAULT_CONFIG: DashboardConfig = {
   theme: 'boxed',
   layout: 'stack',
   textScale: 'L',
+  headingScale: 'S',
   zones: [
     {
       type: 'shortcuts',
@@ -169,7 +172,10 @@ function normalize(raw: any): DashboardConfig {
   const textScale: TextScale = ['S', 'M', 'L', 'XL'].includes(raw?.textScale)
     ? raw.textScale
     : DEFAULT_CONFIG.textScale;
-  return {bubble: {mode}, scan, theme, layout, textScale, zones};
+  const headingScale: TextScale = ['S', 'M', 'L', 'XL'].includes(raw?.headingScale)
+    ? raw.headingScale
+    : DEFAULT_CONFIG.headingScale;
+  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, zones};
 }
 
 function isZone(z: any): z is Zone {

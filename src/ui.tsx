@@ -3,7 +3,7 @@ import React from 'react';
 import {StyleSheet, Text, TouchableOpacity} from 'react-native';
 
 /** Glyph for a file target (📕 pdf / 📄 note). */
-export const fileGlyph = (path: string) => (/\.pdf$/i.test(path) ? '📕' : '📄');
+export const fileGlyph = (path: string) => (/\.pdf$/i.test(path) ? '📕' : /\.epub$/i.test(path) ? '📗' : '📄');
 
 export function Btn({
   label,

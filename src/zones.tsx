@@ -18,15 +18,18 @@ import {Btn, fileGlyph, ui} from './ui';
 /** Scaled style overrides for tappable text (bigger targets = fewer mis-taps). */
 export interface TScale {
   s: number;
+  /** Zone-title multiplier (1 = the historical look); applied to each theme's base size. */
+  hs: number;
   item: object;
   page: object;
   chip: object;
   head: object;
   app: object;
 }
-export function tscale(s: number): TScale {
+export function tscale(s: number, hs = 1): TScale {
   return {
     s,
+    hs,
     item: {fontSize: 14 * s, paddingVertical: 6 * s},
     page: {fontSize: 13 * s, paddingVertical: 4 * s},
     chip: {fontSize: 13 * s, paddingVertical: 4 * s, paddingHorizontal: 11 * s},
@@ -70,7 +73,7 @@ function RecentZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'recen
   const items = (paths ?? []).slice(0, zone.count ?? RECENT_MAX); // normalize() clamps count
   const display = zone.display ?? 'list';
   return (
-    <ZoneFrame theme={theme} title={zone.title || 'Recent'}>
+    <ZoneFrame theme={theme} hs={ts.hs} title={zone.title || 'Recent'}>
       {paths === null && <Text style={ui.empty}>loading…</Text>}
       {paths && items.length === 0 && <Text style={ui.empty}>No recent files.</Text>}
       <View style={display === 'list' ? undefined : ui.itemsWrap}>
@@ -90,11 +93,13 @@ function RecentZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'recen
 function ZoneFrame({
   theme,
   title,
+  hs,
   meta,
   children,
 }: {
   theme: Theme;
   title: string;
+  hs: number;
   meta?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -102,7 +107,7 @@ function ZoneFrame({
     return (
       <View style={ui.boxFrame}>
         <View style={ui.boxCap}>
-          <Text style={ui.boxCapText}>{title}</Text>
+          <Text style={[ui.boxCapText, {fontSize: 13 * hs}]}>{title}</Text>
           {meta ? <Text style={ui.boxCapMeta}>{meta}</Text> : null}
         </View>
         <View style={ui.boxBody}>{children}</View>
@@ -113,7 +118,7 @@ function ZoneFrame({
     return (
       <View style={ui.ledgerZone}>
         <View style={ui.ledgerHead}>
-          <Text style={ui.ledgerLabel}>{title}</Text>
+          <Text style={[ui.ledgerLabel, {fontSize: 11 * hs}]}>{title}</Text>
           {meta ? <Text style={ui.metaMono}>{meta}</Text> : null}
         </View>
         <View>{children}</View>
@@ -123,7 +128,7 @@ function ZoneFrame({
   // airy
   return (
     <View style={ui.airyZone}>
-      <Text style={ui.airyLabel}>
+      <Text style={[ui.airyLabel, {fontSize: 12 * hs}]}>
         {title}
         {meta ? '  ' : ''}
         {meta ? <Text style={ui.metaMono}>{meta}</Text> : null}
@@ -143,7 +148,7 @@ function ShortcutsZone({zone, theme, ts}: {zone: Extract<Zone, {type: 'shortcuts
   const glyph = (it: any) => (it.kind === 'folder' ? '📁' : fileGlyph(it.path));
   const label = (it: any) => `${it.label}${it.kind === 'note-page' ? ` (p.${it.page})` : ''}`;
   return (
-    <ZoneFrame theme={theme} title={zone.title || 'Shortcuts'}>
+    <ZoneFrame theme={theme} hs={ts.hs} title={zone.title || 'Shortcuts'}>
       {zone.items.length === 0 && <Text style={ui.empty}>(no shortcut configured)</Text>}
       <View style={display === 'list' ? undefined : ui.itemsWrap}>
         {zone.items.map((it, i) => (
@@ -318,7 +323,7 @@ function StarsZone({zone, scan, theme, ts, sib, nonce}: {zone: Extract<Zone, {ty
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cached, zone, ts]);
   return (
-    <ZoneFrame theme={theme} title={zone.title || 'Stars'}>
+    <ZoneFrame theme={theme} hs={ts.hs} title={zone.title || 'Stars'}>
       <RefreshRow busy={busy} progress={progress} meta={meta} onPress={() => refresh(true)} />
       {!cached && !busy && <Text style={ui.empty}>(refresh to list stars)</Text>}
       {cached && cached.notes.length === 0 && <Text style={ui.empty}>No stars found.</Text>}
@@ -358,7 +363,7 @@ function KeywordsZone({zone, scan, theme, ts, sib, nonce}: {zone: Extract<Zone, 
     [cached, zone, ts],
   );
   return (
-    <ZoneFrame theme={theme} title={zone.title || 'Keywords'}>
+    <ZoneFrame theme={theme} hs={ts.hs} title={zone.title || 'Keywords'}>
       <RefreshRow busy={busy} progress={progress} meta={meta} onPress={() => refresh(true)} />
       {!cached && !busy && <Text style={ui.empty}>(refresh to list keywords)</Text>}
       {cached && cached.hits.length === 0 && <Text style={ui.empty}>No keywords found.</Text>}
@@ -504,7 +509,7 @@ function AppsZone({zone, theme, ts}: {zone: Extract<Zone, {type: 'apps'}>; theme
   const appStyle =
     display === 'list' ? ui.appPlain : theme === 'ledger' ? ui.appUnderline : ui.appTile;
   return (
-    <ZoneFrame theme={theme} title={zone.title || 'Apps'}>
+    <ZoneFrame theme={theme} hs={ts.hs} title={zone.title || 'Apps'}>
       {zone.apps.length === 0 && <Text style={ui.empty}>(no app configured)</Text>}
       <View style={display === 'list' ? undefined : ui.itemsWrap}>
         {zone.apps.map((a, i) => (

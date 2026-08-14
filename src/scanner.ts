@@ -448,7 +448,7 @@ export function basename(path: string): string {
 }
 
 export function noteTitle(path: string): string {
-  return basename(path).replace(/\.(note|pdf)$/i, '');
+  return basename(path).replace(/\.(note|pdf|epub)$/i, '');
 }
 
 export function parentFolder(path: string): string {

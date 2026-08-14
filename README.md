@@ -31,7 +31,7 @@ reboot / auto power‑off). Turn it **Off** in Settings → Look to use only the
 
 Stacked (or 2‑column masonry), each one of:
 
-- **Shortcuts** — open a folder, a note, or a PDF in one tap (list / grid / inline).
+- **Shortcuts** — open a folder, a note, a PDF, or an EPUB in one tap (list / grid / inline).
 - **Recent** — recently‑opened notes & PDFs, read live from `/Recent/Recent.txt` (no scan; device
   caps it at 8).
 - **Stars** — five‑star pages from the scan, grouped by note; optional per‑star **line preview**

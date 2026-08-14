@@ -39,9 +39,9 @@ function openDocument(path: string, page = 0) {
   return go(() => DashboardNative.openDocument(path, page), 'open the document');
 }
 
-/** Open a scan/shortcut file target (note editor for .note, Document viewer for .pdf). */
+/** Open a scan/shortcut file target (note editor for .note, Document viewer for .pdf/.epub). */
 export function openFile(path: string, page = 0) {
-  return /\.pdf$/i.test(path) ? openDocument(path, page) : openNote(path, page);
+  return /\.(pdf|epub)$/i.test(path) ? openDocument(path, page) : openNote(path, page);
 }
 
 /** Launch an app by "package/activity"; leaves to the OS. */

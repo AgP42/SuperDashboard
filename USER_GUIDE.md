@@ -63,8 +63,8 @@ The dashboard is a stack (or 2‑column masonry) of **sections**. Tap anything t
 **⚙ Configuration** to open Settings (kept away from the busy right side); top‑right are
 **↻ Refresh all** and **⊖** (fold back to the bubble).
 
-- **Shortcuts** — a folder (opens the file manager there), a note, or a PDF (opens the document).
-  Lay them out as a list, a grid, or inline.
+- **Shortcuts** — a folder (opens the file manager there), a note, a PDF, or an EPUB (opens the
+  document). Lay them out as a list, a grid, or inline.
 - **Recent** — your recently‑opened notes & PDFs, read live from the device (no scan needed). Supernote
   only tracks the **last 8** opened files, so this section shows **8 at most** (the count option tops out
   there).
@@ -87,7 +87,8 @@ Open Settings from **⚙ Configuration** on the dashboard (or the toolbar button
 ### Step 1 · Look
 
 Pick the **layout** (1 or 2 columns), the **design** (Ledger / Boxed / Airy, previewed on your
-layout), the **bubble** style, and the **text size** (bigger = easier finger taps).
+layout), the **bubble** style, the **text size** (bigger = easier finger taps), and the **heading
+size** (the section titles, independent from the text).
 
 ![Step 1 — Look](docs/screenshots/wizard-1-look.png)
 
@@ -101,9 +102,10 @@ Keywords / Apps / Recent — you can have several of the same kind), **▲▼** 
 ### Step 3 · Content
 
 Configure each section: the **refresh** policy, rename any section (**✎ edit**), pick **shortcut**
-targets (**＋ Add folder / note / PDF** — a full‑page multi‑select browser, see §7), choose **scan
-folders** and **note order** for Stars/Keywords, the keyword grouping, and the Stars **line preview**
-(see §5).
+targets (**＋ Add folder / note / PDF / EPUB** — a full‑page multi‑select browser, see §7), choose
+**scan folders** for Stars/Keywords (**＋ Folders** — the same browser, several at once) and their
+**note order**, the keyword grouping, the Stars **line preview** (see §5), and the **apps** to show
+(**＋ Apps** — tick several, then **Save (N)** adds them all).
 
 ![Step 3 — Content](docs/screenshots/wizard-3-content.png)
 
@@ -141,8 +143,10 @@ handy before experimenting, or to recover after an accidental **↺ Reset all**.
 
 ## 7. Adding shortcuts (multi‑select browser)
 
-**＋ Add folder / note / PDF** opens a **full‑page browser**: navigate anywhere, tap notes/PDFs to
-select several at once, **＋** a folder to add it, then **Save (N)** adds them all in one go.
+**＋ Add folder / note / PDF / EPUB** opens a **full‑page browser**: navigate anywhere, tap
+notes/PDFs/EPUBs to select several at once, **＋** a folder to add it, then **Save (N)** adds them
+all in one go. The same browser (folders only) picks the **scan folders** of Stars/Keywords
+sections, and the **apps picker** works the same way: tick several apps, then **Save (N)**.
 
 ![Add shortcuts](docs/screenshots/browser-multiselect.png)
 
@@ -171,8 +175,8 @@ plugin's private folder instead, so they aren't synced to the cloud and are clea
 
 ## 10. Good to know / limits
 
-- **PDF pages**: a PDF opens on its last‑used page (jumping to a page isn't available yet).
-- **Stars/keywords in PDFs** aren't listed (the system only exposes them for notes).
+- **PDF pages**: a PDF (or EPUB) opens on its last‑used page (jumping to a page isn't available yet).
+- **Stars/keywords in PDFs/EPUBs** aren't listed (the system only exposes them for notes).
 - **New stars/keywords** on the page you're editing show up when you tap **↻ Refresh** (it saves the
   open note first). Without a manual refresh they appear after you **turn the page** (the editor saves
   on page‑turn/close).

@@ -6,6 +6,6 @@
   "iconPath": "assets/icon.png",
   "desc": "Configurable dashboard: shortcuts, recent, stars, keywords and app launchers, reached from a floating bubble. IMPORTANT: before uninstalling, set the bubble to Off in the plugin (Settings > Look) so it doesn't linger \u2014 if you forget, just restart the device to clear it.",
   "author": "AgP42",
-  "versionName": "0.21.15",
-  "versionCode": "61"
+  "versionName": "0.22.0",
+  "versionCode": "62"
 }

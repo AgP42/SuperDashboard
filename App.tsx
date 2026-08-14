@@ -56,7 +56,11 @@ function DashboardScreen(): React.JSX.Element {
   }, []);
 
   const textScale = cfg?.textScale;
-  const ts = useMemo(() => tscale(textScale ? SCALE[textScale] ?? 1.4 : 1.4), [textScale]);
+  const headingScale = cfg?.headingScale;
+  const ts = useMemo(
+    () => tscale(textScale ? SCALE[textScale] ?? 1.4 : 1.4, headingScale ? SCALE[headingScale] ?? 1 : 1),
+    [textScale, headingScale],
+  );
   // If the page has both Stars and Keywords, the first scan warms both in one
   // pass (per-file cache) so the second zone's scan is instant.
   const sib = useMemo(

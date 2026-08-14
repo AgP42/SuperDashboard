@@ -43,9 +43,8 @@ interface Pick {
 }
 type Modal =
   | null
-  | {kind: 'browse'; onPick: (path: string) => void} // pick one folder (scan scope)
-  | {kind: 'shortcuts'; onDone: (picks: Pick[]) => void} // multi-select folders/notes/PDFs
-  | {kind: 'apps'; onPick: (a: {label: string; component: string}) => void}
+  | {kind: 'shortcuts'; foldersOnly?: boolean; onDone: (picks: Pick[]) => void} // multi-select folders/notes/PDFs/EPUBs
+  | {kind: 'apps'; onDone: (apps: {label: string; component: string}[]) => void}
   | {kind: 'kw'; folders: string[]; onPick: (kw: string) => void}
   | {kind: 'profiles'; cfg: DashboardConfig; onLoad: (c: DashboardConfig) => void};
 
@@ -207,6 +206,19 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
             style={[ui.choice, cfg.textScale === sz && ui.choiceOn]}
             onPress={() => update(c => void (c.textScale = sz))}>
             <Text style={[ui.choiceText, {fontSize: sz === 'S' ? 13 : sz === 'M' ? 15 : sz === 'L' ? 18 : 22}, cfg.textScale === sz && ui.choiceTextOn]}>
+              {sz}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={ui.wizStepTag}>Heading size (section titles)</Text>
+      <View style={ui.row}>
+        {(['S', 'M', 'L', 'XL'] as TextScale[]).map(sz => (
+          <TouchableOpacity
+            key={sz}
+            style={[ui.choice, cfg.headingScale === sz && ui.choiceOn]}
+            onPress={() => update(c => void (c.headingScale = sz))}>
+            <Text style={[ui.choiceText, {fontSize: sz === 'S' ? 13 : sz === 'M' ? 15 : sz === 'L' ? 18 : 22}, cfg.headingScale === sz && ui.choiceTextOn]}>
               {sz}
             </Text>
           </TouchableOpacity>
@@ -376,7 +388,7 @@ function FoldersEditor({i, folders, update, openModal, what}: {i: number; folder
           <Mini label="✕" onPress={() => update(c => void (c.zones[i] as any).folders.splice(j, 1))} />
         </View>
       ))}
-      <Btn label="＋ Folder" onPress={() => openModal({kind: 'browse', onPick: p => update(c => {const z = c.zones[i] as any; z.folders = z.folders ?? []; if (!z.folders.includes(p)) z.folders.push(p);})})} small />
+      <Btn label="＋ Folders" onPress={() => openModal({kind: 'shortcuts', foldersOnly: true, onDone: picks => update(c => {const z = c.zones[i] as any; z.folders = z.folders ?? []; for (const p of picks) {if (!z.folders.includes(p.path)) z.folders.push(p.path);}})})} small />
     </View>
   );
 }
@@ -444,7 +456,7 @@ function AppsEditor({i, zone, update, openModal}: EditorProps<'apps'>) {
           </View>
         </View>
       ))}
-      <Btn label="＋ App" onPress={() => openModal({kind: 'apps', onPick: a => update(c => (c.zones[i] as any).apps.push(a))})} small />
+      <Btn label="＋ Apps" onPress={() => openModal({kind: 'apps', onDone: as => update(c => {const z = c.zones[i] as any; for (const a of as) {if (!z.apps.some((x: any) => x.component === a.component)) z.apps.push(a);}})})} small />
     </View>
   );
 }
@@ -594,9 +606,8 @@ function typeIndex(zones: Zone[], i: number): number {
 
 // ===== modals ==============================================================
 function ModalHost({modal, close}: {modal: NonNullable<Modal>; close: () => void}) {
-  if (modal.kind === 'browse') return <PickBrowser onPick={p => {modal.onPick(p); close();}} onClose={close} />;
-  if (modal.kind === 'shortcuts') return <ShortcutBrowser onDone={p => {modal.onDone(p); close();}} onClose={close} />;
-  if (modal.kind === 'apps') return <AppPickerModal onPick={a => {modal.onPick(a); close();}} onClose={close} />;
+  if (modal.kind === 'shortcuts') return <ShortcutBrowser foldersOnly={modal.foldersOnly} onDone={p => {modal.onDone(p); close();}} onClose={close} />;
+  if (modal.kind === 'apps') return <AppPickerModal onDone={as => {modal.onDone(as); close();}} onClose={close} />;
   if (modal.kind === 'kw') return <KeywordPicker folders={modal.folders} onPick={k => {modal.onPick(k); close();}} onClose={close} />;
   return <ProfilesModal cfg={modal.cfg} onLoad={c => {modal.onLoad(c); close();}} onClose={close} />;
 }
@@ -682,10 +693,11 @@ async function listDirSorted(d: string): Promise<any[]> {
     return [];
   }
 }
-const isNoteOrPdf = (name: string) => /\.(note|pdf)$/i.test(name);
-const fileGlyph = (name: string) => (/\.pdf$/i.test(name) ? '📕 ' : /\.note$/i.test(name) ? '📄 ' : '   ');
+const isOpenableFile = (name: string) => /\.(note|pdf|epub)$/i.test(name);
+const fileGlyph = (name: string) =>
+  /\.pdf$/i.test(name) ? '📕 ' : /\.epub$/i.test(name) ? '📗 ' : /\.note$/i.test(name) ? '📄 ' : '   ';
 
-/** Shared directory-navigation state for the two browser modals. */
+/** Directory-navigation state for the browser modal. */
 function useDirBrowser() {
   const [dir, setDir] = useState(NOTE_START);
   const [entries, setEntries] = useState<any[]>([]);
@@ -696,37 +708,12 @@ function useDirBrowser() {
   return {dir, entries, load, up, atRoot: dir === STORAGE_ROOT};
 }
 
-/** Pick ONE folder (used for scan scope). Full-page. */
-function PickBrowser({onPick, onClose}: {onPick: (p: string) => void; onClose: () => void}) {
-  const {dir, entries, load, up, atRoot} = useDirBrowser();
-  return (
-    <View style={ui.container}>
-      <Text style={ui.wizTitle}>Pick a folder</Text>
-      <View style={ui.row}>
-        <Btn label="⬆" onPress={up} disabled={atRoot} small />
-        <Btn label="✕ cancel" onPress={onClose} small />
-        <Btn label="✓ use this folder" onPress={() => onPick(dir)} small />
-      </View>
-      <Text style={ui.zoneMeta}>{dir}</Text>
-      <ScrollView style={ui.pickerFull}>
-        {entries.map((e, i) => (
-          <TouchableOpacity key={i} onPress={() => e.isDir && load(e.path)}>
-            <Text style={[ui.pickerItem, !e.isDir && {color: '#aaa'}]}>
-              {e.isDir ? '📁 ' : fileGlyph(e.name)}
-              {e.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
 /**
- * Multi-select browser for shortcuts. Navigate anywhere; tap notes/PDFs to
- * (de)select, tap ＋ to add a folder, then Save adds them all at once.
+ * Multi-select browser for shortcuts and scan folders. Navigate anywhere; tap
+ * notes/PDFs/EPUBs to (de)select (foldersOnly greys them out), tap ＋ to add a
+ * folder, then Save adds them all at once.
  */
-function ShortcutBrowser({onDone, onClose}: {onDone: (picks: Pick[]) => void; onClose: () => void}) {
+function ShortcutBrowser({foldersOnly, onDone, onClose}: {foldersOnly?: boolean; onDone: (picks: Pick[]) => void; onClose: () => void}) {
   const {dir, entries, load, up, atRoot} = useDirBrowser();
   const [picks, setPicks] = useState<Pick[]>([]);
   const has = (path: string) => picks.some(p => p.path === path);
@@ -736,7 +723,7 @@ function ShortcutBrowser({onDone, onClose}: {onDone: (picks: Pick[]) => void; on
   return (
     <View style={ui.container}>
       <View style={ui.header}>
-        <Text style={ui.wizTitle}>Add shortcuts</Text>
+        <Text style={ui.wizTitle}>{foldersOnly ? 'Add folders' : 'Add shortcuts'}</Text>
         <View style={ui.headerBtns}>
           <TouchableOpacity style={ui.navBtn} onPress={onClose}>
             <Text style={ui.navBtnText}>✕ Cancel</Text>
@@ -753,7 +740,7 @@ function ShortcutBrowser({onDone, onClose}: {onDone: (picks: Pick[]) => void; on
       <Text style={ui.zoneMeta}>{dir}</Text>
       <ScrollView style={ui.pickerFull}>
         {entries.map((e, i) => {
-          const selectable = !e.isDir && isNoteOrPdf(e.name);
+          const selectable = !foldersOnly && !e.isDir && isOpenableFile(e.name);
           const selected = has(e.path);
           return (
             <View key={i} style={[ui.pickerRow, selected && ui.pickerRowSel]}>
@@ -778,8 +765,12 @@ function ShortcutBrowser({onDone, onClose}: {onDone: (picks: Pick[]) => void; on
   );
 }
 
-function AppPickerModal({onPick, onClose}: {onPick: (a: {label: string; component: string}) => void; onClose: () => void}) {
+function AppPickerModal({onDone, onClose}: {onDone: (apps: {label: string; component: string}[]) => void; onClose: () => void}) {
   const [all, setAll] = useState<{label: string; component: string}[] | null>(null);
+  const [picks, setPicks] = useState<{label: string; component: string}[]>([]);
+  const has = (component: string) => picks.some(p => p.component === component);
+  const toggle = (a: {label: string; component: string}) =>
+    setPicks(ps => (ps.some(p => p.component === a.component) ? ps.filter(p => p.component !== a.component) : [...ps, a]));
   const showAll = async () => {
     try {
       const list: any[] = await DashboardNative.listLaunchableApps();
@@ -792,26 +783,37 @@ function AppPickerModal({onPick, onClose}: {onPick: (a: {label: string; componen
       setAll([]);
     }
   };
+  const appRow = (a: {label: string; component: string}, key: string) => (
+    <TouchableOpacity key={key} style={has(a.component) ? ui.pickerRowSel : undefined} onPress={() => toggle(a)}>
+      <Text style={ui.pickerItem}>
+        {has(a.component) ? '✓ ' : '   '}
+        {a.label}
+      </Text>
+    </TouchableOpacity>
+  );
   return (
     <View style={ui.container}>
-      <Text style={ui.wizTitle}>Add an app</Text>
-      <View style={ui.row}>
-        <Btn label="✕ cancel" onPress={onClose} small />
-        {!all && <Btn label="Show all apps" onPress={showAll} small />}
+      <View style={ui.header}>
+        <Text style={ui.wizTitle}>Add apps</Text>
+        <View style={ui.headerBtns}>
+          <TouchableOpacity style={ui.navBtn} onPress={onClose}>
+            <Text style={ui.navBtnText}>✕ Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[ui.navBtn, ui.navBtnPri, {marginLeft: 8}]} onPress={() => onDone(picks)}>
+            <Text style={[ui.navBtnText, ui.navBtnTextPri]}>Save ({picks.length})</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+      {!all && (
+        <View style={ui.row}>
+          <Btn label="Show all apps" onPress={showAll} small />
+        </View>
+      )}
       <ScrollView style={ui.pickerFull}>
         <Text style={ui.subLabel}>Supernote apps</Text>
-        {CURATED_APPS.map((a, i) => (
-          <TouchableOpacity key={i} onPress={() => onPick(a)}>
-            <Text style={ui.pickerItem}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
+        {CURATED_APPS.map((a, i) => appRow(a, String(i)))}
         {all && <Text style={ui.subLabel}>All apps</Text>}
-        {all?.map((a, i) => (
-          <TouchableOpacity key={'a' + i} onPress={() => onPick(a)}>
-            <Text style={ui.pickerItem}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
+        {all?.map((a, i) => appRow(a, 'a' + i))}
       </ScrollView>
     </View>
   );
