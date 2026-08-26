@@ -7,26 +7,19 @@
 import {NativeModules} from 'react-native';
 import {PluginManager} from 'sn-plugin-lib';
 
-import {BubbleMode, loadConfig} from './config';
+import {loadConfig} from './config';
 
 const {DashboardNative} = NativeModules;
 
-/** label/hint strings for a given bubble display mode. */
-function bubbleTexts(mode: BubbleMode): {label: string; hint: string} {
-  if (mode === 'icon') return {label: '', hint: ''};
-  if (mode === 'hint') return {label: 'Dashboard', hint: 'Tap to open · drag to move'};
-  return {label: 'Dashboard', hint: ''}; // 'label'
-}
-
-/** Apply the saved bubble mode (show it, or remove it when 'off'). */
+/** Apply the saved bubble mode: show the house bubble, or remove it when 'off'.
+ *  The bubble is icon‑only now (just the house) — no label/hint variants. */
 export async function showBubbleFromConfig(): Promise<boolean> {
   try {
     const cfg = await loadConfig();
     if (cfg.bubble.mode === 'off') {
       await DashboardNative.hideBubble(); // no bubble — make sure none lingers
     } else {
-      const {label, hint} = bubbleTexts(cfg.bubble.mode);
-      await DashboardNative.showBubble(label, hint);
+      await DashboardNative.showBubble();
     }
     return true;
   } catch {

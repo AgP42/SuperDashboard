@@ -171,14 +171,14 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
       </View>
 
       <Text style={ui.wizStepTag}>Bubble</Text>
-      <Text style={ui.subLabel}>Floats over every screen — tap to open the dashboard, drag to move. Set Off to use only the toolbar Dashboard button.</Text>
+      <Text style={ui.subLabel}>The house floats over every screen — tap to open the dashboard, drag to move. Set Off to use only the toolbar SuperDashboard button.</Text>
       <View style={ui.snapWrap}>
-        {(['icon', 'label', 'hint', 'off'] as BubbleMode[]).map(m => (
+        {(['icon', 'off'] as BubbleMode[]).map(m => (
           <Snap
             key={m}
             width={130}
             on={cfg.bubble.mode === m}
-            label={m === 'icon' ? '⊕ only' : m === 'label' ? '⊕ + label' : m === 'hint' ? '⊕ + hint' : 'Off'}
+            label={m === 'icon' ? 'House' : 'Off'}
             onPress={() => {
               update(c => void (c.bubble.mode = m));
               if (m === 'off') DashboardNative.hideBubble?.().catch(() => {});
@@ -187,11 +187,19 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
               {m === 'off' ? (
                 <Text style={{fontSize: 30, color: '#999999'}}>⊘</Text>
               ) : (
-                <>
-                  <Text style={{fontSize: 34, color: '#000'}}>⊕</Text>
-                  {m !== 'icon' && <Text style={{fontSize: 13, fontWeight: '700', color: '#000'}}>Dashboard</Text>}
-                  {m === 'hint' && <Text style={{fontSize: 9, color: '#555', textAlign: 'center'}}>Tap to open{'\n'}drag to move</Text>}
-                </>
+                <View
+                  style={{
+                    width: 58,
+                    height: 58,
+                    borderRadius: 16,
+                    borderWidth: 2,
+                    borderColor: '#000',
+                    backgroundColor: '#fff',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                  <Image source={require('../assets/icon.png')} style={{width: 34, height: 34}} resizeMode="contain" />
+                </View>
               )}
             </View>
           </Snap>

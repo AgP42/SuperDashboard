@@ -1,6 +1,6 @@
-# Dashboard for Supernote — User Guide
+# SuperDashboard for Supernote — User Guide
 
-Dashboard turns a floating **⊕ bubble** into a launcher for your Supernote: one tap opens a
+SuperDashboard turns a floating **⊕ bubble** into a launcher for your Supernote: one tap opens a
 dashboard you compose yourself from **shortcuts**, **recent files**, **stars**, **keywords** and
 **app** sections. It runs fully on‑device and offline.
 
@@ -8,27 +8,32 @@ dashboard you compose yourself from **shortcuts**, **recent files**, **stars**, 
 
 ## See it in action
 
-![Dashboard demo](docs/dashboard-demo.gif)
+![SuperDashboard demo](docs/dashboard-demo.gif)
 
 *Bubble → dashboard, opening shortcuts, adding a ★ and refreshing to catch it, keyword chips, the
 settings wizard, and folding back to the bubble.* ▶ [Full-quality walkthrough (MP4)](docs/dashboard-demo.mp4)
 
-> Requires the Supernote developer/beta firmware with the plugin system. Works on A5X, A5X2 (Manta)
-> and Nomad.
+> Requires the Supernote **plugin‑preview (Chauvet) firmware** with the plugin system. Works on A5X,
+> A5X2 (Manta) and Nomad. A preview build doesn't run on the older stable firmware (and vice‑versa),
+> so pick the release that matches your device.
+>
+> **First‑run permission:** SuperDashboard asks for **file access** the first time you open it — it
+> needs it to scan your notes for stars/keywords and to delete a star. If you decline, the launcher
+> (shortcuts, apps, opening files/folders) keeps working; only the note‑scanning zones stay empty.
 
 ---
 
 ## 1. Install
 
-1. Copy `dashboard.snplg` (from `dist/` or the Releases) into the **`MyStyle`** folder on your
+1. Copy `SuperDashboard.snplg` (from `dist/` or the Releases) into the **`MyStyle`** folder on your
    Supernote (USB, or the Partner app).
-2. On the device: **Settings → Apps → Plugins → Add Plugin → Dashboard**.
+2. On the device: **Settings → Apps → Plugins → Add Plugin → SuperDashboard**.
 
 | Plugins list | Plugin details |
 |---|---|
 | ![Plugins list](docs/screenshots/install-plugins-list.png) | ![Plugin details](docs/screenshots/install-plugin-detail.png) |
 
-Open any note or document and tap the **Dashboard** button in the side toolbar. On first run it opens
+Open any note or document and tap the **SuperDashboard** button in the side toolbar. On first run it opens
 the Settings wizard (nothing is configured yet); afterwards it opens your dashboard directly. The
 floating bubble also opens the dashboard from anywhere.
 
@@ -47,13 +52,10 @@ The bubble hides itself while the dashboard is open and comes back when you leav
 any exit (buttons, a stray edge gesture, the system backgrounding the view), so it never gets stuck
 off‑screen. After a device restart (or auto power‑off) it re‑appears when the plugin next loads.
 
-Its look — and turning it **Off** — is chosen in Settings → *Look* → Bubble. Turn it **Off** to use
-only the toolbar **Dashboard** button. **Before uninstalling the plugin, set the bubble to Off** so
-it doesn't linger on screen (otherwise a reboot clears it).
-
-| ⊕ only | ⊕ + label | ⊕ + hint |
-|---|---|---|
-| ![icon](docs/screenshots/bubble-icon.png) | ![label](docs/screenshots/bubble-label.png) | ![hint](docs/screenshots/bubble-hint.png) |
+The bubble is the **house logo** in a small rounded chip — icon only. In Settings → *Look* → Bubble
+it's a simple **On / Off** choice; **Off** uses only the toolbar **SuperDashboard** button.
+**Removing the plugin now clears the bubble automatically**, so you no longer have to set it Off first
+before uninstalling (a reboot remains the ultimate fallback if one ever lingers).
 
 ---
 
@@ -63,11 +65,12 @@ The dashboard is a stack (or 2‑column masonry) of **sections**. Tap anything t
 **⚙ Configuration** to open Settings (kept away from the busy right side); top‑right are
 **↻ Refresh all** and **⊖** (fold back to the bubble).
 
-- **Shortcuts** — a folder (opens the file manager there), a note, a PDF, or an EPUB (opens the
-  document). Lay them out as a list, a grid, or inline.
-- **Recent** — your recently‑opened notes & PDFs, read live from the device (no scan needed). Supernote
-  only tracks the **last 8** opened files, so this section shows **8 at most** (the count option tops out
-  there).
+- **Shortcuts** — a folder (opens the file manager there), a note, a PDF, an EPUB or a comic
+  (CBZ/XPS/FB2) — and it opens **on the right page**. Lay them out as a list, a grid, or inline.
+- **Recent** — your recently‑used notes & documents. On the stable firmware these are the device's
+  recently‑**opened** files (the last 8 it tracks). On the plugin‑preview firmware that list is outside
+  the plugin sandbox, so Recent instead shows the recently‑**modified** notes/documents under `/Note`
+  and `/Document`, newest first.
 - **Stars** — every starred (★) page from the last scan, grouped by note. Each star is a tappable
   row; a **✕★** can delete just that star (see §5).
 - **Keywords** — your notes' keywords, shown as tappable **chips**; each chip opens that exact
@@ -175,11 +178,15 @@ plugin's private folder instead, so they aren't synced to the cloud and are clea
 
 ## 10. Good to know / limits
 
-- **PDF pages**: a PDF (or EPUB) opens on its last‑used page (jumping to a page isn't available yet).
+- **Page jump**: notes, PDFs, EPUBs and comics now open **on the target page** (a star's page, a
+  keyword's page, or a shortcut's saved page) via the firmware's file opener.
+- **Recent on the preview firmware**: the device's recently‑opened list (`/Recent`) is outside the
+  plugin's file sandbox there, so Recent shows recently‑**modified** notes/documents instead.
 - **Stars/keywords in PDFs/EPUBs** aren't listed (the system only exposes them for notes).
 - **New stars/keywords** on the page you're editing show up when you tap **↻ Refresh** (it saves the
   open note first). Without a manual refresh they appear after you **turn the page** (the editor saves
   on page‑turn/close).
 - **Search** launches the native search but can't be pre‑filled.
-- If a **stray bubble** ever appears (e.g. after reinstalling), open the plugin once — it clears
-  leftover bubbles — or set **Bubble = Off** in Settings → Look.
+- **Stray bubble**: removing the plugin clears its bubble automatically. If one ever lingers (e.g.
+  after a reinstall), open the plugin once — it clears leftover bubbles — set **Bubble = Off** in
+  Settings → Look, or reboot.

@@ -1,5 +1,5 @@
 /**
- * Dashboard — a configurable, always-available dashboard for Supernote.
+ * SuperDashboard — a configurable, always-available dashboard for Supernote.
  * The bubble (⊕) floats over everything; tap expands the dashboard.
  * @format
  */
@@ -12,6 +12,7 @@ import {PluginManager} from 'sn-plugin-lib';
 import {setRoute} from './src/route';
 import {showBubbleFromConfig} from './src/bubble';
 import {hasSavedConfig} from './src/config';
+import {ensureFilePermissions} from './src/permissions';
 
 const {DashboardNative} = NativeModules;
 
@@ -71,6 +72,14 @@ AppState.addEventListener('change', next => {
   try {
     await DashboardNative?.clearAllBubbles();
   } catch (e) {}
+  // Chauvet plugin-preview firmware enforces FILE:READ even on raw java.io: the
+  // very next step (showBubbleFromConfig → loadConfig → readTextFile) reads
+  // MyStyle, and the launcher's scans read Note/Document. Request the file
+  // permissions BEFORE that first read so it isn't silently denied. A denial is
+  // fine — loadConfig falls back to defaults and the launcher (apps, shortcuts,
+  // intent opening) stays usable; only stars/keywords/recent/config-persist need it.
+  const perm = await ensureFilePermissions().catch(() => false);
+  blog(`[perm] ensureFilePermissions = ${perm}`);
   const ok = await showBubbleFromConfig().catch(() => false);
   blog(`[bub] load restore = ${ok}`);
 })();
@@ -102,16 +111,29 @@ DeviceEventEmitter.addListener('onBubbleTap', async () => {
   }
   blog(`[bub] tap -> showPluginView=${shown}`);
 });
-// Observation only — act on nothing. The host dispatches life events for OTHER
-// plugins' activity too, so acting here once silently killed the bubble.
-PluginManager.addPluginLifeListener({
-  onStart: () => blog('[life] start'),
-  onStop: () => blog('[life] stop'),
+// Chauvet removed addPluginLifeListener({onStart,onStop}) → registerPluginLifeListener
+// with a single onMsg(msg). msg.state runs 0..5 = init, mount, start, pause,
+// unmount, DESTROY. state 5 (destroy) is the "the plugin is being removed / torn
+// down for good" signal plugins never had before. Normal open/close only emits
+// start/pause (2/3) — destroy fires on uninstall/disable — so we use it as the
+// long-wanted onRemove: clear any floating bubble this plugin left in the
+// persistent PluginHost process, so removing the plugin no longer strands a bubble
+// (users previously had to set the bubble Off first, or reboot). clearAllBubbles is
+// process-wide but only removes views tagged as OURS, so it can't touch other plugins.
+PluginManager.registerPluginLifeListener({
+  onMsg(msg) {
+    const state = msg && msg.state;
+    blog(`[life] state=${state}`);
+    if (state === 5) {
+      blog('[life] destroy → clearing our bubble');
+      DashboardNative?.clearAllBubbles?.().catch(() => {});
+    }
+  },
 });
 
 PluginManager.registerButton(1, ['NOTE', 'DOC'], {
   id: 100,
-  name: 'Dashboard',
+  name: 'SuperDashboard',
   icon: Image.resolveAssetSource(require('./assets/icon.png')).uri,
   showType: 1,
 });

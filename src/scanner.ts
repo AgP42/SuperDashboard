@@ -254,6 +254,14 @@ async function scanFileStars(path: string, mode: LineMode, mtime: number): Promi
   const pageIdx = unwrap<number[]>(await PluginFileAPI.searchFiveStars(path)) ?? [];
   if (!pageIdx.length) return [];
   const counts = new Map<number, number>();
+  // ⚠️ CHAUVET 1-INDEX — DEVICE-TEST. `p` is searchFiveStars' page index; we treat
+  // it as 0-based and store StarPage.page 1-based for display/open. The round-trip
+  // BACK to element APIs cancels (starLineImages/deleteStarByIndex pass page-1 = p,
+  // and getElements/deleteElements use that same base), so star reads/deletes stay
+  // correct even if the base shifted. What does NOT auto-cancel is this 1-based value
+  // reaching the human "p.N" label and openFile/openNote: if Chauvet's searchFiveStars
+  // is now 1-based, `p + 1` over-counts → the shown page and the opened page are one
+  // too high. Verify on device; if so, drop the +1 here (and mirror in getKeyWords below).
   for (const p of pageIdx) counts.set(p + 1, (counts.get(p + 1) ?? 0) + 1); // 0→1-based
   const pages: StarPage[] = [...counts.entries()].map(([page, count]) => ({page, count})).sort((a, b) => a.page - b.page);
   await addLinePreview(path, pages, mode, mtime);
@@ -283,6 +291,12 @@ async function addLinePreview(path: string, pages: StarPage[], mode: LineMode, m
 
 async function scanFileKeywords(path: string): Promise<{keyword: string; page: number}[]> {
   const total = unwrap<number>(await PluginFileAPI.getNoteTotalPageNum(path)) ?? 0;
+  // ⚠️ CHAUVET 1-INDEX — DEVICE-TEST. This builds a 0-based page list [0..total-1]
+  // for getKeyWords and treats the returned k.page as 0-based (→ +1 for display/open).
+  // If Chauvet's getKeyWords is now 1-indexed, two things break together: page 0 in
+  // the input list is invalid and the last page (index === total) is never queried
+  // (missed keywords), and `k.page + 1` shows/opens one page too high. If device
+  // testing confirms 1-indexing, use [1..total] here and drop the +1 below.
   const pageList = Array.from({length: total}, (_, k) => k);
   const kws = unwrap<any[]>(await PluginFileAPI.getKeyWords(path, pageList)) ?? [];
   return kws.map((k: any) => ({keyword: k?.keyword ?? '', page: (k?.page ?? 0) + 1}));
@@ -441,6 +455,51 @@ async function scanKeywordsImpl(
     }
   }
   return {hits, truncated, total: files.length};
+}
+
+// ---- Recent-modified fallback (Chauvet blocks /Recent from FILE:READ) --------
+const RECENT_ROOTS = ['/storage/emulated/0/Note', '/storage/emulated/0/Document'];
+const RECENT_EXT = /\.(note|pdf|epub)$/i;
+let recentCache: {at: number; files: string[]} | null = null;
+const RECENT_TTL = 60_000; // re-walk at most once a minute (dashboard reopens are cheap)
+
+/** Most-recently-MODIFIED notes/documents under the in-scope folders, newest first.
+ *  A safe stand-in for /Recent/Recent.txt (recently OPENED), which the Chauvet
+ *  firmware blocks even with FILE:READ granted. Uses the same bounded listDir walk
+ *  as the scanner (listDir works on the in-scope /Note and /Document trees). */
+export async function recentModifiedFiles(limit: number): Promise<string[]> {
+  const now = Date.now();
+  if (recentCache && now - recentCache.at < RECENT_TTL) return recentCache.files.slice(0, limit);
+  const out: {path: string; mtime: number}[] = [];
+  let frontier = RECENT_ROOTS.slice();
+  const seen = new Set<string>();
+  let dirs = 0;
+  while (frontier.length && dirs < 400) {
+    const batch = frontier.filter(d => !seen.has(d));
+    batch.forEach(d => seen.add(d));
+    const next: string[] = [];
+    for (let i = 0; i < batch.length; i += LIST_CONCURRENCY) {
+      const slice = batch.slice(i, i + LIST_CONCURRENCY);
+      dirs += slice.length;
+      const lists = await Promise.all(
+        slice.map(d => DashboardNative.listDir(d).then((x: DirEntry[]) => x ?? []).catch(() => [] as DirEntry[])),
+      );
+      for (const entries of lists) {
+        for (const e of entries) {
+          if (e.isDir) {
+            if (!SKIP_DIR.test(e.name)) next.push(e.path);
+          } else if (RECENT_EXT.test(e.name)) {
+            out.push({path: e.path, mtime: e.mtime});
+          }
+        }
+      }
+    }
+    frontier = next;
+  }
+  out.sort((a, b) => b.mtime - a.mtime);
+  const files = out.map(f => f.path);
+  recentCache = {at: now, files};
+  return files.slice(0, limit);
 }
 
 export function basename(path: string): string {

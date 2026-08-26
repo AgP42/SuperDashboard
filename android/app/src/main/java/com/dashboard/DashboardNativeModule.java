@@ -6,8 +6,13 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,6 +22,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -357,11 +363,11 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
     // ---- Overlay bubble ---------------------------------------------------
 
     /**
-     * Show the floating bubble. `label` under the glyph (empty=none), `hint` line
-     * below that (empty=none) → drives the three display modes from config.
+     * Show the floating bubble: the SuperDashboard house in a rounded white chip with
+     * a black outline (like SuperStickyNote's bubble). Icon‑only — no label/hint text.
      */
     @ReactMethod
-    public void showBubble(String label, String hint, Promise promise) {
+    public void showBubble(Promise promise) {
         main.post(() -> {
             try {
                 Context ctx = getReactApplicationContext();
@@ -375,36 +381,17 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
                 clearTaggedBubbles();
                 wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
 
-                LinearLayout panel = new LinearLayout(ctx);
+                // The bubble is just the SuperDashboard house, DRAWN on a Canvas (loading
+                // R.drawable inside the persistent plugin host renders unreliably — an ugly
+                // black bar, the same issue SuperStickyNote hit). It sits in a rounded white
+                // chip with a black outline, matching SuperStickyNote's bubble.
+                int glyphSize = dp(34);
+                ImageView panel = new ImageView(ctx);
                 panel.setTag(BUBBLE_TAG);
-                panel.setOrientation(LinearLayout.VERTICAL);
-                panel.setGravity(Gravity.CENTER_HORIZONTAL);
-                panel.setBackgroundColor(Color.WHITE);
-                panel.setPadding(dp(10), dp(8), dp(10), dp(8));
-
-                TextView glyph = new TextView(ctx);
-                glyph.setText("⊕"); // ⊕ circled plus
-                glyph.setTextColor(Color.BLACK);
-                glyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 30);
-                glyph.setGravity(Gravity.CENTER);
-                panel.addView(glyph);
-
-                if (label != null && !label.isEmpty()) {
-                    TextView lbl = new TextView(ctx);
-                    lbl.setText(label);
-                    lbl.setTextColor(Color.BLACK);
-                    lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-                    lbl.setGravity(Gravity.CENTER);
-                    panel.addView(lbl);
-                }
-                if (hint != null && !hint.isEmpty()) {
-                    TextView h = new TextView(ctx);
-                    h.setText(hint);
-                    h.setTextColor(Color.DKGRAY);
-                    h.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-                    h.setGravity(Gravity.CENTER);
-                    panel.addView(h);
-                }
+                panel.setImageBitmap(makeHouseIcon(glyphSize));
+                panel.setScaleType(ImageView.ScaleType.CENTER);
+                panel.setPadding(dp(12), dp(12), dp(12), dp(12));
+                panel.setBackground(roundedBg(Color.WHITE, Color.BLACK, dp(22), dp(3)));
 
                 int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                         ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -548,5 +535,49 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
     private int dp(int v) {
         float d = getReactApplicationContext().getResources().getDisplayMetrics().density;
         return (int) (v * d);
+    }
+
+    /** A rounded chip background: solid fill + outline (used for the bubble). */
+    private GradientDrawable roundedBg(int fill, int stroke, int radius, int strokeW) {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(fill);
+        g.setCornerRadius(radius);
+        g.setStroke(strokeW, stroke);
+        return g;
+    }
+
+    /**
+     * Draw the SuperDashboard house (24×24 viewBox) as a stroked bitmap — the bubble
+     * face and a match for the plugin icon. Drawn in code because loading R.drawable
+     * inside the plugin host renders unreliably. Round cap/join keeps the line-art
+     * clean at small sizes on e-ink.
+     */
+    private Bitmap makeHouseIcon(int size) {
+        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas cv = new Canvas(bmp);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(Color.BLACK);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(size * 2f / 24f);
+        p.setStrokeCap(Paint.Cap.ROUND);
+        p.setStrokeJoin(Paint.Join.ROUND);
+        float s = size / 24f; // 24×24 viewBox
+        // Outline: left eave → apex → right eave → down the right wall → floor → close up the left wall.
+        Path house = new Path();
+        house.moveTo(4 * s, 9.5f * s);
+        house.lineTo(12 * s, 2.5f * s);
+        house.lineTo(20 * s, 9.5f * s);
+        house.lineTo(20 * s, 20 * s);
+        house.lineTo(4 * s, 20 * s);
+        house.close();
+        // Door, open at the floor line.
+        Path door = new Path();
+        door.moveTo(9.5f * s, 20 * s);
+        door.lineTo(9.5f * s, 13.5f * s);
+        door.lineTo(14.5f * s, 13.5f * s);
+        door.lineTo(14.5f * s, 20 * s);
+        cv.drawPath(house, p);
+        cv.drawPath(door, p);
+        return bmp;
     }
 }

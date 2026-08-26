@@ -17,7 +17,9 @@ const LEGACY_CONFIG_PATH = '/storage/emulated/0/MyStyle/Dashboard/config.json';
 /** The device's own /Recent/Recent.txt only ever holds the last 8 opened files. */
 export const RECENT_MAX = 8;
 
-export type BubbleMode = 'icon' | 'label' | 'hint' | 'off';
+/** The bubble is icon‑only now (the house) or off. Older configs used 'label'/'hint'
+ *  — normalize() folds those into 'icon'. */
+export type BubbleMode = 'icon' | 'off';
 
 export type ShortcutItem =
   | {kind: 'folder'; label: string; path: string}
@@ -82,7 +84,7 @@ export interface DashboardConfig {
 }
 
 export const DEFAULT_CONFIG: DashboardConfig = {
-  bubble: {mode: 'label'},
+  bubble: {mode: 'icon'},
   scan: {autoRefreshHours: 24, autoOnOpen: false},
   theme: 'boxed',
   layout: 'stack',
@@ -156,9 +158,8 @@ export async function saveConfig(cfg: DashboardConfig): Promise<boolean> {
 /** Shallow validation so a malformed field can't crash the dashboard. */
 function normalize(raw: any): DashboardConfig {
   // Fallbacks come from DEFAULT_CONFIG so each default has one owner.
-  const mode: BubbleMode = ['icon', 'label', 'hint', 'off'].includes(raw?.bubble?.mode)
-    ? raw.bubble.mode
-    : DEFAULT_CONFIG.bubble.mode;
+  // Only 'off' or 'icon' now; fold the retired 'label'/'hint' (and anything else) into 'icon'.
+  const mode: BubbleMode = raw?.bubble?.mode === 'off' ? 'off' : 'icon';
   const zones: Zone[] = Array.isArray(raw?.zones) ? raw.zones.filter(isZone).map(normalizeZone) : DEFAULT_CONFIG.zones;
   const scan: ScanSettings = {
     autoRefreshHours:

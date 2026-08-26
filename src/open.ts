@@ -3,9 +3,17 @@
  * foreground (a target launched behind the fullscreen plugin view looks dead).
  * The bubble is restored on the way out so the user can return. On failure we
  * stay and show a dialog instead of silently closing.
+ *
+ * Files (note/pdf/epub/…) prefer the Chauvet SDK opener PluginFileAPI.openFile:
+ *  - it HONOURS the page jump (the old Document intent ignored `page` and always
+ *    reopened the last-viewed page — the long-standing "viewer ignores the page"
+ *    bug), and
+ *  - it opens epub/cbz/xps/fb2/note, not only the two hardcoded intent targets.
+ * The legacy component intents remain as a fallback for the old firmware / any
+ * device where openFile is absent or refuses.
  */
 import {NativeModules} from 'react-native';
-import {NativeUIUtils} from 'sn-plugin-lib';
+import {NativeUIUtils, PluginFileAPI} from 'sn-plugin-lib';
 
 import {leavePlugin} from './bubble';
 
@@ -24,24 +32,53 @@ async function go(fn: () => Promise<unknown>, what: string): Promise<void> {
   }
 }
 
-/** Open a note at a 1-based page (0/undefined → last-used page). */
-function openNote(path: string, page = 0) {
-  return go(() => DashboardNative.openNote(path, page), 'open the note');
-}
-
 /** Open a folder in the file manager. */
 export function openFolder(path: string) {
   return go(() => DashboardNative.openFolder(path), 'open the folder');
 }
 
-/** Open a PDF/document in the Supernote Document viewer. */
-function openDocument(path: string, page = 0) {
-  return go(() => DashboardNative.openDocument(path, page), 'open the document');
+/**
+ * Dashboard pages are 1-based (0/undefined = "no specific page, keep last view").
+ * PluginFileAPI.openFile is 0-based: a value >= 0 jumps to that page, -1 keeps
+ * the last viewed page.
+ */
+function toZeroBasedPage(page: number): number {
+  return page && page > 0 ? page - 1 : -1;
 }
 
-/** Open a scan/shortcut file target (note editor for .note, Document viewer for .pdf/.epub). */
-export function openFile(path: string, page = 0) {
-  return /\.(pdf|epub)$/i.test(path) ? openDocument(path, page) : openNote(path, page);
+/** Try the SDK opener. Returns true only if the file was actually opened.
+ *  Absent method / thrown error / {success:false} → false so we fall back. */
+async function openViaSdk(path: string, page: number): Promise<boolean> {
+  const fn = (PluginFileAPI as any)?.openFile;
+  if (typeof fn !== 'function') return false;
+  try {
+    const res: any = await PluginFileAPI.openFile(path, toZeroBasedPage(page));
+    if (res === true) return true;
+    if (res && typeof res === 'object') {
+      if (res.success === false) return false;
+      // APIResponse success (or a bare object with no error) → opened.
+      return res.success === true || res.error == null;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Open a file target: note editor for .note, Document viewer for .pdf/.epub/…
+ *  `page` is 1-based (0 = keep last-viewed page). */
+export async function openFile(path: string, page = 0): Promise<void> {
+  if (await openViaSdk(path, page)) {
+    leavePlugin();
+    return;
+  }
+  // Fallback: legacy component intents (old firmware / openFile unavailable).
+  // The Document intent's `page` extra is known to be ignored by the viewer.
+  const isDoc = /\.(pdf|epub)$/i.test(path);
+  await go(
+    () => (isDoc ? DashboardNative.openDocument(path, page) : DashboardNative.openNote(path, page)),
+    isDoc ? 'open the document' : 'open the note',
+  );
 }
 
 /** Launch an app by "package/activity"; leaves to the OS. */

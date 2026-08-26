@@ -1,11 +1,12 @@
 {
-  "name": "Dashboard",
-  "pluginKey": "dashboard",
+  "name": "SuperDashboard",
+  "pluginKey": "SuperDashboard",
   "pluginID": "dsh4b0ardplg9x2k",
   "jsMainPath": "index",
   "iconPath": "assets/icon.png",
-  "desc": "Configurable dashboard: shortcuts, recent, stars, keywords and app launchers, reached from a floating bubble. IMPORTANT: before uninstalling, set the bubble to Off in the plugin (Settings > Look) so it doesn't linger \u2014 if you forget, just restart the device to clear it.",
+  "desc": "SuperDashboard: a configurable dashboard \u2014 shortcuts, recent files, stars, keywords and app launchers \u2014 reached from a floating bubble that sits over everything. Needs file access to scan your notes; the bubble is cleared automatically when you remove the plugin.",
   "author": "AgP42",
-  "versionName": "0.22.0",
-  "versionCode": "62"
+  "versionName": "0.23.0",
+  "versionCode": "63",
+  "uses-permissions": ["plugin.permission.FILE:READ", "plugin.permission.FILE:WRITE"]
 }

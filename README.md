@@ -1,14 +1,21 @@
-# Dashboard (Supernote plugin)
+# SuperDashboard (Supernote plugin)
 
 A configurable, always‑available dashboard for Supernote e‑ink devices. Its face is a draggable
 **bubble** (⊕) that floats over everything; tap it to open the dashboard, drag it to move it.
 
-![Dashboard demo](docs/dashboard-demo.gif)
+![SuperDashboard demo](docs/dashboard-demo.gif)
 
 ▶ [Full walkthrough (MP4)](docs/dashboard-demo.mp4) · 📖 [User Guide](USER_GUIDE.md) · ⬇ [Latest release](../../releases/latest)
 
 Capabilities validated on A5X + Manta are written up in the public repo's `docs/FINDINGS.md` and the
 `supernote-plugin-dev` skill under `.claude/skills/`.
+
+> **Firmware:** this build targets the **plugin‑preview (Chauvet) firmware** and is built on
+> `sn-plugin-lib` 0.1.65. A preview build does **not** run on the older stable firmware and vice‑versa,
+> so two releases are shipped — install the one matching your device. On first open SuperDashboard asks
+> for **file access** (READ/WRITE): it needs it to scan your notes for stars/keywords and to remove a
+> star. If you deny it, the launcher (shortcuts, apps, opening files/folders) still works — only the
+> note‑scanning zones go empty.
 
 ## Two surfaces
 
@@ -21,23 +28,34 @@ Capabilities validated on A5X + Manta are written up in the public repo's `docs/
 
 ## The bubble
 
-Shows top‑right on first use, then stays wherever you drag it. Hidden while the dashboard is on
-screen and restored on the way out — driven by the app's foreground state, so it self‑heals on every
-exit path (buttons, a stray system gesture, the host backgrounding the view) and can't get stranded.
-It's an overlay of the persistent plugin host, so it's re‑shown when the plugin reloads (after a
-reboot / auto power‑off). Turn it **Off** in Settings → Look to use only the toolbar button.
+The bubble is the **house logo** in a rounded white chip (drawn natively so it stays crisp on
+e‑ink) — icon only, no text. It shows top‑right on first use, then stays wherever you drag it. Hidden
+while the dashboard is on screen and restored on the way out — driven by the app's foreground state,
+so it self‑heals on every exit path (buttons, a stray system gesture, the host backgrounding the
+view) and can't get stranded. It's an overlay of the persistent plugin host, so it's re‑shown when
+the plugin reloads (after a reboot / auto power‑off). It's a simple **On / Off** choice in Settings →
+Look — Off uses only the toolbar button. **Removing the plugin now clears the bubble automatically**
+(via the firmware's plugin‑destroy event) — you no longer have to set it Off first, and a reboot
+remains the ultimate fallback.
 
 ## Zones
 
 Stacked (or 2‑column masonry), each one of:
 
-- **Shortcuts** — open a folder, a note, a PDF, or an EPUB in one tap (list / grid / inline).
-- **Recent** — recently‑opened notes & PDFs, read live from `/Recent/Recent.txt` (no scan; device
-  caps it at 8).
+- **Shortcuts** — open a folder, a note, a PDF, an EPUB or a comic (CBZ/XPS/FB2) in one tap (list /
+  grid / inline).
+- **Recent** — on the stable firmware, the device's recently‑**opened** notes & PDFs, read live from
+  `/Recent/Recent.txt` (device caps it at 8). On the plugin‑preview firmware that file is outside the
+  permission sandbox, so Recent falls back to the recently‑**modified** notes/documents under
+  `/Note` + `/Document` (newest first, cached).
 - **Stars** — five‑star pages from the scan, grouped by note; optional per‑star **line preview**
   (handwriting image, or OCR text with image fallback); delete a single star (`✕★`).
-- **Keywords** — keyword occurrences as tappable chips; each opens its note + page.
+- **Keywords** — keyword occurrences as tappable chips; each opens its note **on the right page**.
 - **Apps** — launch device apps via exported‑activity intents.
+
+Opening a file uses the firmware's `PluginFileAPI.openFile`, which jumps straight to the target page
+(the old intent‑based opener ignored the page and reopened the last‑viewed one), with a fallback to
+the legacy intents on older firmware.
 
 ## Scanning
 
@@ -53,7 +71,8 @@ open never flushes.
 
 - **Config** — JSON at `MyStyle/Plugins/Dashboard/config.json`, written by the wizard (native atomic
   write, read via the native reader — `fetch` caches `file://`). Named profiles in `profiles.json`.
-  Hand‑editable; `normalize`/`normalizeZone` guard against malformed input.
+  Hand‑editable; `normalize`/`normalizeZone` guard against malformed input. (The on‑disk folder keeps
+  its historical `Dashboard` name so existing settings survive the rename to SuperDashboard.)
 - **Caches** — the scan cache (`scancache.json`) and star line‑preview PNGs (`line_*.png`) live in
   the **plugin‑private dir** (`getPluginDirPath()`), not `MyStyle` (which is cloud‑synced and
   file‑observed — caches don't belong there). Orphaned line PNGs are garbage‑collected after every
@@ -63,20 +82,21 @@ open never flushes.
 ## Build & deploy
 
 ```bash
-source ../env.sh
-./buildPlugin.sh                                   # → build/outputs/dashboard.snplg
-gio copy build/outputs/dashboard.snplg 'mtp://<device>/Supernote/MyStyle/dashboard.snplg'
+source ../env.sh                                       # JDK 21 + Android SDK on PATH
+./buildPlugin.sh                                       # → build/outputs/SuperDashboard.snplg
+gio copy build/outputs/SuperDashboard.snplg 'mtp://<device>/Supernote/MyStyle/SuperDashboard.snplg'
 # install on device: Settings → Apps → Plugins → Add Plugin
 ```
 
 ## Known limitations
 
-- PDFs open on their last‑used page (no page‑jump yet).
+- On the plugin‑preview firmware `/Recent/Recent.txt` is outside the FILE:READ sandbox, so the Recent
+  zone shows recently‑**modified** files (under `/Note` + `/Document`) instead of recently‑opened ones.
 - Stars/keywords inside PDFs aren't returned by the SDK (notes only).
 - New stars/keywords on the page being edited are caught by a **manual ↻ Refresh** (which flushes the
   open note); an auto‑scan alone sees them only after a page‑turn (when the editor saves).
 
 ## Support
 
-Dashboard is a personal project built by a Supernote user, for Supernote users. If it saves you a few
-taps every day, a small contribution is appreciated: https://ko-fi.com/agp42
+SuperDashboard is a personal project built by a Supernote user, for Supernote users. If it saves you a
+few taps every day, a small contribution is appreciated: https://ko-fi.com/agp42
