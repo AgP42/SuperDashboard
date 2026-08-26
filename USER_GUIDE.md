@@ -13,13 +13,16 @@ dashboard you compose yourself from **shortcuts**, **recent files**, **stars**, 
 *Bubble → dashboard, opening shortcuts, adding a ★ and refreshing to catch it, keyword chips, the
 settings wizard, and folding back to the bubble.* ▶ [Full-quality walkthrough (MP4)](docs/dashboard-demo.mp4)
 
-> Requires the Supernote **plugin‑preview (Chauvet) firmware** with the plugin system. Works on A5X,
-> A5X2 (Manta) and Nomad. A preview build doesn't run on the older stable firmware (and vice‑versa),
-> so pick the release that matches your device.
+> **Which version do I need?** Supernote's firmware is called **Chauvet** (the platform name — like
+> "Android"), so what matters is the **version number**. This build (**v1.0.0**) is for **Chauvet
+> 3.29.43** (Manta / Nomad) / **2.26.40** (A5 X / A6 X) **or later**, which added the plugin permission
+> system. If your device is on an **older** Chauvet, use **v0.22.0** instead — a build made for one
+> firmware version won't run on the other ("package not compatible", or it does nothing). Check your
+> version in the device settings.
 >
-> **First‑run permission:** SuperDashboard asks for **file access** the first time you open it — it
-> needs it to scan your notes for stars/keywords and to delete a star. If you decline, the launcher
-> (shortcuts, apps, opening files/folders) keeps working; only the note‑scanning zones stay empty.
+> **First‑run permission:** on 3.29.43 / 2.26.40+, SuperDashboard asks for **file access** the first time
+> you open it — it needs it to scan your notes for stars/keywords and to delete a star. If you decline,
+> the launcher (shortcuts, apps, opening files/folders) keeps working; only the note‑scanning zones stay empty.
 
 ---
 
@@ -68,9 +71,9 @@ The dashboard is a stack (or 2‑column masonry) of **sections**. Tap anything t
 - **Shortcuts** — a folder (opens the file manager there), a note, a PDF, an EPUB or a comic
   (CBZ/XPS/FB2) — and it opens **on the right page**. Lay them out as a list, a grid, or inline.
 - **Recent** — your recently‑used notes & documents. On the stable firmware these are the device's
-  recently‑**opened** files (the last 8 it tracks). On the plugin‑preview firmware that list is outside
-  the plugin sandbox, so Recent instead shows the recently‑**modified** notes/documents under `/Note`
-  and `/Document`, newest first.
+  recently‑**opened** files (the last 8 it tracks). On Chauvet 3.29.43 / 2.26.40 and later that list is
+  outside the plugin sandbox, so Recent instead shows the recently‑**modified** notes/documents under
+  `/Note` and `/Document`, newest first.
 - **Stars** — every starred (★) page from the last scan, grouped by note. Each star is a tappable
   row; a **✕★** can delete just that star (see §5).
 - **Keywords** — your notes' keywords, shown as tappable **chips**; each chip opens that exact
@@ -180,8 +183,8 @@ plugin's private folder instead, so they aren't synced to the cloud and are clea
 
 - **Page jump**: notes, PDFs, EPUBs and comics now open **on the target page** (a star's page, a
   keyword's page, or a shortcut's saved page) via the firmware's file opener.
-- **Recent on the preview firmware**: the device's recently‑opened list (`/Recent`) is outside the
-  plugin's file sandbox there, so Recent shows recently‑**modified** notes/documents instead.
+- **Recent on Chauvet 3.29.43 / 2.26.40+**: the device's recently‑opened list (`/Recent`) is outside
+  the plugin's file sandbox there, so Recent shows recently‑**modified** notes/documents instead.
 - **Stars/keywords in PDFs/EPUBs** aren't listed (the system only exposes them for notes).
 - **New stars/keywords** on the page you're editing show up when you tap **↻ Refresh** (it saves the
   open note first). Without a manual refresh they appear after you **turn the page** (the editor saves

@@ -10,12 +10,26 @@ A configurable, always‑available dashboard for Supernote e‑ink devices. Its 
 Capabilities validated on A5X + Manta are written up in the public repo's `docs/FINDINGS.md` and the
 `supernote-plugin-dev` skill under `.claude/skills/`.
 
-> **Firmware:** this build targets the **plugin‑preview (Chauvet) firmware** and is built on
-> `sn-plugin-lib` 0.1.65. A preview build does **not** run on the older stable firmware and vice‑versa,
-> so two releases are shipped — install the one matching your device. On first open SuperDashboard asks
-> for **file access** (READ/WRITE): it needs it to scan your notes for stars/keywords and to remove a
-> star. If you deny it, the launcher (shortcuts, apps, opening files/folders) still works — only the
-> note‑scanning zones go empty.
+## Which version do I need? (Supernote firmware)
+
+Supernote's firmware is called **Chauvet** — that's the platform name (every recent build is a
+"Chauvet", much like every recent phone build is an "Android"), so what matters here is the **version
+number**. In August 2026 Supernote began rolling out **Chauvet 3.29.43** (Manta / Nomad) and **2.26.40**
+(A5 X / A6 X), which add a new plugin **permission system** and other breaking plugin‑API changes. It's
+a developer preview today and is expected to reach everyone soon. A build made for one firmware version
+does not run on the other, so pick the release that matches the version on your device (check it in the
+device settings):
+
+| Your Chauvet version | Download |
+|---|---|
+| Older than 3.29.43 (Manta/Nomad) / 2.26.40 (A5 X / A6 X) | **v0.22.0** |
+| 3.29.43 (Manta/Nomad) / 2.26.40 (A5 X / A6 X) or later | **v1.0.0** |
+
+Both builds are the same SuperDashboard. **v1.0.0** is rebuilt for `sn-plugin-lib` 0.1.65; on first open
+it asks for **file access** (READ/WRITE) to scan your notes for stars/keywords and to remove a star — if
+you deny it, the launcher (shortcuts, apps, opening files/folders) still works, only the note‑scanning
+zones go empty. Once these firmware versions ship publicly, v1.0.0 becomes the main build. Installing the
+wrong build shows *"package not compatible"* or the plugin does nothing.
 
 ## Two surfaces
 
@@ -45,9 +59,9 @@ Stacked (or 2‑column masonry), each one of:
 - **Shortcuts** — open a folder, a note, a PDF, an EPUB or a comic (CBZ/XPS/FB2) in one tap (list /
   grid / inline).
 - **Recent** — on the stable firmware, the device's recently‑**opened** notes & PDFs, read live from
-  `/Recent/Recent.txt` (device caps it at 8). On the plugin‑preview firmware that file is outside the
-  permission sandbox, so Recent falls back to the recently‑**modified** notes/documents under
-  `/Note` + `/Document` (newest first, cached).
+  `/Recent/Recent.txt` (device caps it at 8). On Chauvet 3.29.43 / 2.26.40 and later that file is
+  outside the permission sandbox, so Recent falls back to the recently‑**modified** notes/documents
+  under `/Note` + `/Document` (newest first, cached).
 - **Stars** — five‑star pages from the scan, grouped by note; optional per‑star **line preview**
   (handwriting image, or OCR text with image fallback); delete a single star (`✕★`).
 - **Keywords** — keyword occurrences as tappable chips; each opens its note **on the right page**.
@@ -90,8 +104,8 @@ gio copy build/outputs/SuperDashboard.snplg 'mtp://<device>/Supernote/MyStyle/Su
 
 ## Known limitations
 
-- On the plugin‑preview firmware `/Recent/Recent.txt` is outside the FILE:READ sandbox, so the Recent
-  zone shows recently‑**modified** files (under `/Note` + `/Document`) instead of recently‑opened ones.
+- On Chauvet 3.29.43 / 2.26.40 and later, `/Recent/Recent.txt` is outside the FILE:READ sandbox, so the
+  Recent zone shows recently‑**modified** files (under `/Note` + `/Document`) instead of recently‑opened ones.
 - Stars/keywords inside PDFs aren't returned by the SDK (notes only).
 - New stars/keywords on the page being edited are caught by a **manual ↻ Refresh** (which flushes the
   open note); an auto‑scan alone sees them only after a page‑turn (when the editor saves).
