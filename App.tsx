@@ -81,7 +81,7 @@ function DashboardScreen(): React.JSX.Element {
     <View style={ui.container}>
       <View style={ui.header}>
         <View style={ui.headerBtns}>
-          <Text style={ui.title}>Dashboard</Text>
+          <Text style={ui.title}>SuperDashboard</Text>
           {/* config link on the LEFT, away from the frequently-tapped right side */}
           <TouchableOpacity style={ui.iconBtn} onPress={() => setRoute('config')}>
             <Text style={ui.iconText}>⚙ Configuration</Text>

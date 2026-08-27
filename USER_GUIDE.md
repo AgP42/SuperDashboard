@@ -55,6 +55,8 @@ The bubble hides itself while the dashboard is open and comes back when you leav
 any exit (buttons, a stray edge gesture, the system backgrounding the view), so it never gets stuck
 off‑screen. After a device restart (or auto power‑off) it re‑appears when the plugin next loads.
 
+![The house bubble on a note](docs/screenshots/bubble-house.png)
+
 The bubble is the **house logo** in a small rounded chip — icon only. In Settings → *Look* → Bubble
 it's a simple **On / Off** choice; **Off** uses only the toolbar **SuperDashboard** button.
 **Removing the plugin now clears the bubble automatically**, so you no longer have to set it Off first

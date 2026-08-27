@@ -42,6 +42,8 @@ wrong build shows *"package not compatible"* or the plugin does nothing.
 
 ## The bubble
 
+![The house bubble on a note](docs/screenshots/bubble-house.png)
+
 The bubble is the **house logo** in a rounded white chip (drawn natively so it stays crisp on
 e‑ink) — icon only, no text. It shows top‑right on first use, then stays wherever you drag it. Hidden
 while the dashboard is on screen and restored on the way out — driven by the app's foreground state,

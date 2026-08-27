@@ -122,7 +122,7 @@ export function SettingsScreen(): React.JSX.Element {
       <View style={ui.kofiRow}>
         <View style={{flex: 1}}>
           <Text style={ui.kofiText}>
-            Dashboard is a personal project built by a Supernote user, for Supernote users. I built
+            SuperDashboard is a personal project built by a Supernote user, for Supernote users. I built
             it with love, time, skills and expensive (AI) tokens ;-) If it saves you a few taps
             every day, please consider a small contribution:
           </Text>
@@ -494,7 +494,7 @@ function MiniPage({theme, cols, zones, width}: {theme: Theme; cols: number; zone
   zones.forEach((z, i) => columns[i % cols].push(z));
   return (
     <View style={[ui.miniPage, {width, height}]}>
-      <Text style={ui.miniPageTitle}>Dashboard</Text>
+      <Text style={ui.miniPageTitle}>SuperDashboard</Text>
       {zones.length === 0 && <Text style={{fontSize: 9, color: '#999', marginTop: 6}}>empty — add sections</Text>}
       <View style={{flexDirection: 'row', flex: 1}}>
         {columns.map((col, ci) => (
