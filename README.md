@@ -12,9 +12,7 @@ Capabilities validated on A5X + Manta are written up in the public repo's `docs/
 
 ## Which version do I need? (Supernote firmware)
 
-Supernote's firmware is called **Chauvet** — that's the platform name (every recent build is a
-"Chauvet", much like every recent phone build is an "Android"), so what matters here is the **version
-number**. In August 2026 Supernote began rolling out **Chauvet 3.29.43** (Manta / Nomad) and **2.26.40**
+In August 2026 Supernote began rolling out **Chauvet 3.29.43** (Manta / Nomad) and **2.26.40**
 (A5 X / A6 X), which add a new plugin **permission system** and other breaking plugin‑API changes. It's
 a developer preview today and is expected to reach everyone soon. A build made for one firmware version
 does not run on the other, so pick the release that matches the version on your device (check it in the
