@@ -21,12 +21,12 @@ device settings):
 | Your Chauvet version | Download |
 |---|---|
 | Older than 3.29.43 (Manta/Nomad) / 2.26.40 (A5 X / A6 X) | **v0.22.0** |
-| 3.29.43 (Manta/Nomad) / 2.26.40 (A5 X / A6 X) or later | **v1.0.0** |
+| 3.29.43 (Manta/Nomad) / 2.26.40 (A5 X / A6 X) or later | **v1.0.1** |
 
-Both builds are the same SuperDashboard. **v1.0.0** is rebuilt for `sn-plugin-lib` 0.1.65; on first open
+Both builds are the same SuperDashboard. **v1.0.1** is rebuilt for `sn-plugin-lib` 0.1.65; on first open
 it asks for **file access** (READ/WRITE) to scan your notes for stars/keywords and to remove a star — if
 you deny it, the launcher (shortcuts, apps, opening files/folders) still works, only the note‑scanning
-zones go empty. Once these firmware versions ship publicly, v1.0.0 becomes the main build. Installing the
+zones go empty. Once these firmware versions ship publicly, v1.0.1 becomes the main build. Installing the
 wrong build shows *"package not compatible"* or the plugin does nothing.
 
 ## Two surfaces

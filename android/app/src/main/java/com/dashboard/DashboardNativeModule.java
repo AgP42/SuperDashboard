@@ -385,13 +385,18 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
                 // R.drawable inside the persistent plugin host renders unreliably — an ugly
                 // black bar, the same issue SuperStickyNote hit). It sits in a rounded white
                 // chip with a black outline, matching SuperStickyNote's bubble.
-                int glyphSize = dp(34);
+                // Size the house in SP (like the old ⊕ glyph did) so it tracks the device's
+                // font-size setting — that's why the old bubble felt "adaptive" — and keep
+                // it small: the previous dp(34) icon + dp(12) padding + dp(3) border read as
+                // ~1cm on a 300dpi Manta/Nomad. ~24sp + dp(8) padding + dp(2) border ≈ 6–7mm.
+                int glyphSize = (int) TypedValue.applyDimension(
+                        TypedValue.COMPLEX_UNIT_SP, 24, ctx.getResources().getDisplayMetrics());
                 ImageView panel = new ImageView(ctx);
                 panel.setTag(BUBBLE_TAG);
                 panel.setImageBitmap(makeHouseIcon(glyphSize));
                 panel.setScaleType(ImageView.ScaleType.CENTER);
-                panel.setPadding(dp(12), dp(12), dp(12), dp(12));
-                panel.setBackground(roundedBg(Color.WHITE, Color.BLACK, dp(22), dp(3)));
+                panel.setPadding(dp(8), dp(8), dp(8), dp(8));
+                panel.setBackground(roundedBg(Color.WHITE, Color.BLACK, dp(16), dp(2)));
 
                 int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                         ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY

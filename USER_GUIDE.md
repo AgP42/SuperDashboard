@@ -14,7 +14,7 @@ dashboard you compose yourself from **shortcuts**, **recent files**, **stars**, 
 settings wizard, and folding back to the bubble.* ▶ [Full-quality walkthrough (MP4)](docs/dashboard-demo.mp4)
 
 > **Which version do I need?** Supernote's firmware is called **Chauvet** (the platform name — like
-> "Android"), so what matters is the **version number**. This build (**v1.0.0**) is for **Chauvet
+> "Android"), so what matters is the **version number**. This build (**v1.0.1**) is for **Chauvet
 > 3.29.43** (Manta / Nomad) / **2.26.40** (A5 X / A6 X) **or later**, which added the plugin permission
 > system. If your device is on an **older** Chauvet, use **v0.22.0** instead — a build made for one
 > firmware version won't run on the other ("package not compatible", or it does nothing). Check your
