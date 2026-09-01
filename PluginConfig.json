@@ -6,7 +6,7 @@
   "iconPath": "assets/icon.png",
   "desc": "SuperDashboard: a configurable dashboard \u2014 shortcuts, recent files, stars, keywords and app launchers \u2014 reached from a floating bubble that sits over everything. Needs file access to scan your notes; the bubble is cleared automatically when you remove the plugin.",
   "author": "AgP42",
-  "versionName": "1.0.1",
-  "versionCode": "65",
+  "versionName": "1.0.2",
+  "versionCode": "66",
   "uses-permissions": ["plugin.permission.FILE:READ", "plugin.permission.FILE:WRITE"]
 }

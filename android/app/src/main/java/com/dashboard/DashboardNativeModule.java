@@ -407,7 +407,12 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
                         type,
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                        PixelFormat.OPAQUE);
+                        // TRANSLUCENT (not OPAQUE): the bubble is a ROUNDED chip, so the view's
+                        // square corners are transparent. On an OPAQUE overlay some e-ink
+                        // compositors (reported on Manta) fill those transparent corners with
+                        // BLACK — the bubble then looks like a black square. TRANSLUCENT keeps
+                        // the window's alpha so the corners show the note behind, as intended.
+                        PixelFormat.TRANSLUCENT);
                 // Coordinates are top-left origin (matches the drag handler).
                 // First placement (no dragged position yet) → top-right corner;
                 // x needs the laid-out width, so it's set in a post() below.
