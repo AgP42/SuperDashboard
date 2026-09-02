@@ -80,7 +80,7 @@ async function collectNotes(roots: string[]): Promise<{files: NoteFile[]; trunca
 }
 
 /** Recursively collect .note files under the given roots, newest first.
- *  BFS level-by-level with parallel listDir — a serial walk of ~600 dirs was
+ *  BFS level-by-level with parallel listDir: a serial walk of ~600 dirs was
  *  the dominant scan cost (each listDir is a native round-trip). */
 async function walkNotes(roots: string[]): Promise<{files: NoteFile[]; truncated: boolean}> {
   const out: NoteFile[] = [];
@@ -139,7 +139,7 @@ export interface StarNote {
 
 // ---- Per-file scan cache (persisted) --------------------------------------
 // Keyed by file path; invalidated by mtime. Lets a rescan skip every unchanged
-// file (the SDK per-file calls are the cost) — 2nd+ scans become near-instant.
+// file (the SDK per-file calls are the cost); 2nd+ scans become near-instant.
 // Stores ALL keywords (filter applied at assembly) so zones with different
 // filters share it. Shared by Stars and Keywords so each file is read once.
 interface FileScan {
@@ -161,7 +161,7 @@ async function loadCache(): Promise<Map<string, FileScan>> {
     let text: string = await DashboardNative.readTextFile(dir + CACHE_FILE);
     let migrated = false;
     if ((!text || !text.trim()) && dir !== LEGACY_CACHE_DIR) {
-      // One-time migration from the old MyStyle location (cloud-synced —
+      // One-time migration from the old MyStyle location (cloud-synced;
       // caches don't belong there). Deleted after the first private save.
       text = await DashboardNative.readTextFile(LEGACY_CACHE_DIR + CACHE_FILE);
       migrated = true;
@@ -171,7 +171,7 @@ async function loadCache(): Promise<Map<string, FileScan>> {
       for (const [k, v] of Object.entries(obj.files ?? {})) map.set(k, v as FileScan);
       if (migrated) {
         // Migrated entries reference line PNGs in the legacy dir, which we
-        // purge — drop the previews so the next scan regenerates them in the
+        // purge; drop the previews so the next scan regenerates them in the
         // private dir instead of showing dead file paths.
         for (const e of map.values()) {
           for (const p of e.stars ?? []) {
@@ -198,7 +198,7 @@ async function saveCache(): Promise<void> {
     await DashboardNative.writeFile(dir + CACHE_FILE, json);
   } catch {
     // The plugin-private dir can be transiently read-only (seen on SmartNote
-    // AI) — one retry, then give up until the next scan.
+    // AI); one retry, then give up until the next scan.
     await new Promise(r => setTimeout(r, 300));
     try {
       await DashboardNative.writeFile(dir + CACHE_FILE, json);
@@ -221,7 +221,7 @@ function purgeLegacyOnce(dir: string) {
 }
 
 /**
- * Garbage-collect line_*.png strips no longer referenced by any cached star —
+ * Garbage-collect line_*.png strips no longer referenced by any cached star;
  * a deleted star, an edited/removed note, or line preview switched off used to
  * leave its PNG behind forever (the only pruning was per-page at regeneration
  * time, which never runs for a page that lost its last star). Runs after every
@@ -254,7 +254,7 @@ async function scanFileStars(path: string, mode: LineMode, mtime: number): Promi
   const pageIdx = unwrap<number[]>(await PluginFileAPI.searchFiveStars(path)) ?? [];
   if (!pageIdx.length) return [];
   const counts = new Map<number, number>();
-  // ⚠️ CHAUVET 1-INDEX — DEVICE-TEST. `p` is searchFiveStars' page index; we treat
+  // ⚠️ CHAUVET 1-INDEX: DEVICE-TEST. `p` is searchFiveStars' page index; we treat
   // it as 0-based and store StarPage.page 1-based for display/open. The round-trip
   // BACK to element APIs cancels (starLineImages/deleteStarByIndex pass page-1 = p,
   // and getElements/deleteElements use that same base), so star reads/deletes stay
@@ -291,7 +291,7 @@ async function addLinePreview(path: string, pages: StarPage[], mode: LineMode, m
 
 async function scanFileKeywords(path: string): Promise<{keyword: string; page: number}[]> {
   const total = unwrap<number>(await PluginFileAPI.getNoteTotalPageNum(path)) ?? 0;
-  // ⚠️ CHAUVET 1-INDEX — DEVICE-TEST. This builds a 0-based page list [0..total-1]
+  // ⚠️ CHAUVET 1-INDEX: DEVICE-TEST. This builds a 0-based page list [0..total-1]
   // for getKeyWords and treats the returned k.page as 0-based (→ +1 for display/open).
   // If Chauvet's getKeyWords is now 1-indexed, two things break together: page 0 in
   // the input list is invalid and the last page (index === total) is never queried
@@ -360,7 +360,7 @@ async function ensureScanned(
  * so a scan picks up stars/keywords on the page shown underneath, without the
  * user turning the page. saveCurrentNote() is the SDK's sanctioned way to
  * persist unsaved edits (the editor otherwise only auto-saves on page-turn).
- * Only call from a MANUAL refresh — flushing on every open foregrounded the
+ * Only call from a MANUAL refresh: flushing on every open foregrounded the
  * editor and made the dashboard flicker (the reverted v0.20.2 regression).
  * Best-effort; returns the flushed path or null.
  */

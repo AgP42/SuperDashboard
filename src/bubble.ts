@@ -12,12 +12,12 @@ import {loadConfig} from './config';
 const {DashboardNative} = NativeModules;
 
 /** Apply the saved bubble mode: show the house bubble, or remove it when 'off'.
- *  The bubble is icon‑only now (just the house) — no label/hint variants. */
+ *  The bubble is icon-only now (just the house); no label/hint variants. */
 export async function showBubbleFromConfig(): Promise<boolean> {
   try {
     const cfg = await loadConfig();
     if (cfg.bubble.mode === 'off') {
-      await DashboardNative.hideBubble(); // no bubble — make sure none lingers
+      await DashboardNative.hideBubble(); // no bubble; make sure none lingers
     } else {
       await DashboardNative.showBubble();
     }

@@ -4,9 +4,9 @@
   "pluginID": "dsh4b0ardplg9x2k",
   "jsMainPath": "index",
   "iconPath": "assets/icon.png",
-  "desc": "SuperDashboard: a configurable dashboard \u2014 shortcuts, recent files, stars, keywords and app launchers \u2014 reached from a floating bubble that sits over everything. Needs file access to scan your notes; the bubble is cleared automatically when you remove the plugin.",
+  "desc": "SuperDashboard: a configurable dashboard reached from a floating bubble or the toolbar. Configurable sections: shortcuts (folders, notes, pdf, ...), a little file browser, name search (with a small query grammar), recent files, stars, keywords, a clock, device status (battery / free storage / stats), app launchers, and Note Clips. Several choices of designs and organisations, font (including MyStyle fonts) and text size.\n\nNote Clips: lasso any part of a note and tap \"Add to Dashboard\" to pin it as a labelled thumbnail that links back to its exact source page: sort, filter by folder or label, size the thumbnails, and optionally mark the captured area on the note.\n\nClock: 12/24-hour, optional date, ISO or US week number, several faces (including a 7-segment \"Digital\" style), and extra time zones you dial in with +/- offsets from local time.\n\nFully offline (no internet). Needs file access: READ to scan notes for stars/keywords, browse/open files and capture clips; WRITE to save its own settings and, only when you turn it on, draw the clip frame on your note. Deleting a star or a clip is always an explicit tap.\n\nSource & updates: https://github.com/AgP42/SuperDashboard; Support the plugin: https://ko-fi.com/agp42",
   "author": "AgP42",
-  "versionName": "1.0.2",
-  "versionCode": "66",
+  "versionName": "1.6.7",
+  "versionCode": "92",
   "uses-permissions": ["plugin.permission.FILE:READ", "plugin.permission.FILE:WRITE"]
 }

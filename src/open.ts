@@ -6,7 +6,7 @@
  *
  * Files (note/pdf/epub/…) prefer the Chauvet SDK opener PluginFileAPI.openFile:
  *  - it HONOURS the page jump (the old Document intent ignored `page` and always
- *    reopened the last-viewed page — the long-standing "viewer ignores the page"
+ *    reopened the last-viewed page; the long-standing "viewer ignores the page"
  *    bug), and
  *  - it opens epub/cbz/xps/fb2/note, not only the two hardcoded intent targets.
  * The legacy component intents remain as a fallback for the old firmware / any
@@ -46,13 +46,14 @@ function toZeroBasedPage(page: number): number {
   return page && page > 0 ? page - 1 : -1;
 }
 
-/** Try the SDK opener. Returns true only if the file was actually opened.
+/** Try the SDK opener with an ALREADY-RESOLVED page (firmware page space, -1 =
+ *  keep last-viewed). Returns true only if the file was actually opened.
  *  Absent method / thrown error / {success:false} → false so we fall back. */
-async function openViaSdk(path: string, page: number): Promise<boolean> {
+async function openViaSdk(path: string, sdkPage: number): Promise<boolean> {
   const fn = (PluginFileAPI as any)?.openFile;
   if (typeof fn !== 'function') return false;
   try {
-    const res: any = await PluginFileAPI.openFile(path, toZeroBasedPage(page));
+    const res: any = await PluginFileAPI.openFile(path, sdkPage);
     if (res === true) return true;
     if (res && typeof res === 'object') {
       if (res.success === false) return false;
@@ -68,7 +69,7 @@ async function openViaSdk(path: string, page: number): Promise<boolean> {
 /** Open a file target: note editor for .note, Document viewer for .pdf/.epub/…
  *  `page` is 1-based (0 = keep last-viewed page). */
 export async function openFile(path: string, page = 0): Promise<void> {
-  if (await openViaSdk(path, page)) {
+  if (await openViaSdk(path, toZeroBasedPage(page))) {
     leavePlugin();
     return;
   }
@@ -77,6 +78,22 @@ export async function openFile(path: string, page = 0): Promise<void> {
   const isDoc = /\.(pdf|epub)$/i.test(path);
   await go(
     () => (isDoc ? DashboardNative.openDocument(path, page) : DashboardNative.openNote(path, page)),
+    isDoc ? 'open the document' : 'open the note',
+  );
+}
+
+/** Open a note at a RAW firmware page (as captured by getCurrentPageNum); no
+ *  ±1 conversion, so a clip backlink lands on the exact page it was taken from.
+ *  Used only by Note Clips. */
+export async function openFileAtPage(path: string, rawPage: number): Promise<void> {
+  const p = typeof rawPage === 'number' ? rawPage : -1;
+  if (await openViaSdk(path, p)) {
+    leavePlugin();
+    return;
+  }
+  const isDoc = /\.(pdf|epub)$/i.test(path);
+  await go(
+    () => (isDoc ? DashboardNative.openDocument(path, p) : DashboardNative.openNote(path, p)),
     isDoc ? 'open the document' : 'open the note',
   );
 }

@@ -3,10 +3,10 @@
  *
  * For each five-star on a page we find the strokes on the star's line and either
  * render them (a cropped strip of the page PNG) or OCR them. OCR
- * (recognizeElements) is unreliable — it intermittently fails — so 'text' mode
+ * (recognizeElements) is unreliable: it intermittently fails; so 'text' mode
  * falls back to the image per line (handled by the scanner).
  *
- * Geometry: EMR is rotated 90° vs the screen — element x = the VERTICAL (row)
+ * Geometry: EMR is rotated 90° vs the screen: element x = the VERTICAL (row)
  * axis, element y = horizontal. Per-element maxX/maxY are the page EMR size, not
  * the element box; real positions come from stroke.points / fiveStar.points. The
  * image crop is expressed as fractions of the page, so it's resolution-independent.
@@ -137,7 +137,7 @@ async function readStarGeom(path: string, page0: number): Promise<StarGeom | nul
 }
 
 /** OCR strokes, retrying the transient "Recognition failed (117)" error. '' if
- *  it recognises nothing (the firmware OCR is unreliable — hence 'image' mode). */
+ *  it recognises nothing (the firmware OCR is unreliable; hence 'image' mode). */
 async function recognize(elements: any[], size: any): Promise<string> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const raw: any = await PluginCommAPI.recognizeElements(elements, {width: size?.width, height: size?.height});

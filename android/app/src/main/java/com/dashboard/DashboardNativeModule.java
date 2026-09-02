@@ -3,6 +3,7 @@ package com.dashboard;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -13,9 +14,12 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
+import android.os.BatteryManager;
 import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.StatFs;
 import android.provider.Settings;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -357,6 +361,120 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
             promise.resolve(true);
         } catch (Exception e) {
             promise.reject("LOG_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        }
+    }
+
+    // ---- Fonts (user .ttf/.otf from MyStyle/fonts) ------------------------
+
+    /** List usable font files in MyStyle/fonts as [{name, path}]. */
+    @ReactMethod
+    public void listFonts(Promise promise) {
+        try {
+            File dir = new File("/storage/emulated/0/MyStyle/fonts");
+            File[] kids = dir.listFiles();
+            WritableArray out = Arguments.createArray();
+            if (kids != null) {
+                for (File f : kids) {
+                    String n = f.getName().toLowerCase();
+                    if (f.isFile() && (n.endsWith(".ttf") || n.endsWith(".otf"))) {
+                        WritableMap m = Arguments.createMap();
+                        m.putString("name", f.getName());
+                        m.putString("path", f.getAbsolutePath());
+                        out.pushMap(m);
+                    }
+                }
+            }
+            promise.resolve(out);
+        } catch (Exception e) {
+            promise.reject("LISTFONTS_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Register a MyStyle font file under a RN fontFamily name so {@code <Text fontFamily>}
+     *  can use it. RN can't load a font from an arbitrary path directly — this bridges it. */
+    @ReactMethod
+    public void registerFont(String path, String family, Promise promise) {
+        try {
+            android.graphics.Typeface tf = android.graphics.Typeface.createFromFile(path);
+            com.facebook.react.common.assets.ReactFontManager.getInstance().addCustomFont(family, tf);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("REGFONT_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Register a font shipped inside the JS bundle (base64) under a RN fontFamily.
+     *  Used for the bundled DSEG7 7-segment face so the plugin stays fully offline:
+     *  decode → write to cacheDir → Typeface.createFromFile → addCustomFont. */
+    @ReactMethod
+    public void registerFontBase64(String base64, String family, Promise promise) {
+        try {
+            java.io.File out = new java.io.File(getReactApplicationContext().getCacheDir(), "font_" + family + ".ttf");
+            // Decode + write only once; a later process load reuses the cached .ttf
+            // (registration itself is per-process, but the 31 KB decode/write is not
+            // repeated). try-with-resources closes the stream even if write() throws.
+            if (!out.exists() || out.length() == 0) {
+                byte[] bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(out)) {
+                    fos.write(bytes);
+                }
+            }
+            android.graphics.Typeface tf = android.graphics.Typeface.createFromFile(out);
+            com.facebook.react.common.assets.ReactFontManager.getInstance().addCustomFont(family, tf);
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("REGFONT64_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        }
+    }
+
+    // ---- Device status (battery / storage / info) ------------------------
+
+    /** Battery {level: 0-100 (or -1), charging: bool} via the sticky battery intent. */
+    @ReactMethod
+    public void getBattery(Promise promise) {
+        try {
+            Intent b = getReactApplicationContext().registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            WritableMap m = Arguments.createMap();
+            if (b == null) {
+                m.putInt("level", -1);
+                m.putBoolean("charging", false);
+                promise.resolve(m);
+                return;
+            }
+            int level = b.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scale = b.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+            int status = b.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            m.putInt("level", (scale > 0 && level >= 0) ? Math.round(level * 100f / scale) : -1);
+            m.putBoolean("charging", status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL);
+            promise.resolve(m);
+        } catch (Exception e) {
+            promise.reject("BATTERY_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Free/total bytes for internal shared storage, and the SD card if present. */
+    @ReactMethod
+    public void getStorage(Promise promise) {
+        try {
+            WritableMap m = Arguments.createMap();
+            StatFs in = new StatFs(Environment.getExternalStorageDirectory().getAbsolutePath());
+            m.putDouble("internalFree", (double) in.getAvailableBytes());
+            m.putDouble("internalTotal", (double) in.getTotalBytes());
+            boolean hasSd = false;
+            // The 2nd app-specific external dir, when present, lives on removable media.
+            File[] ext = getReactApplicationContext().getExternalFilesDirs(null);
+            if (ext != null && ext.length > 1 && ext[1] != null) {
+                try {
+                    StatFs sd = new StatFs(ext[1].getAbsolutePath());
+                    m.putDouble("sdFree", (double) sd.getAvailableBytes());
+                    m.putDouble("sdTotal", (double) sd.getTotalBytes());
+                    hasSd = true;
+                } catch (Exception ignored) {}
+            }
+            m.putBoolean("hasSd", hasSd);
+            promise.resolve(m);
+        } catch (Exception e) {
+            promise.reject("STORAGE_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
         }
     }
 

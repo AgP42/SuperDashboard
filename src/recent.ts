@@ -19,7 +19,7 @@ function log(m: string): void {
 }
 
 export async function readRecent(): Promise<string[]> {
-  // 1) Direct read of the device's recent list — works on the old firmware and
+  // 1) Direct read of the device's recent list: works on the old firmware and
   //    anywhere /Recent is in FILE:READ scope.
   try {
     const text: string = await DashboardNative.readTextFile(RECENT_PATH);
@@ -30,7 +30,7 @@ export async function readRecent(): Promise<string[]> {
     log(`direct ${paths.length} paths`);
     return paths;
   } catch (e: any) {
-    log(`direct blocked (${e && e.message}) — using recently-modified fallback`);
+    log(`direct blocked (${e && e.message}); using recently-modified fallback`);
   }
   // 2) Chauvet: /Recent is unreachable. Show recently-modified notes/docs instead.
   try {

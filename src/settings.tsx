@@ -1,18 +1,20 @@
 /**
- * Settings — a guided 3-step wizard; every change autosaves.
+ * Settings: a guided 3-step wizard; every change autosaves.
  *   1 Look (layout · design · bubble · text size)
  *   2 Sections (+ live preview, add/reorder/remove)
  *   3 Content (per-zone details, refresh, sorts, line preview)
  * The header has Reset all + Save/load config; a ✕ closes the plugin. No JSON
- * editor here — advanced users edit MyStyle/Plugins/Dashboard/config.json directly.
+ * editor here; advanced users edit MyStyle/Plugins/Dashboard/config.json directly.
  */
 import React, {useEffect, useState} from 'react';
-import {Image, NativeModules, ScrollView, Text, TextInput, TouchableOpacity, View} from 'react-native';
+import {Image, NativeModules, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
 
 const KOFI_QR = require('../assets/kofi-qr.png');
 
 import {
+  BlockHeight,
   BubbleMode,
+  ClockStyle,
   DashboardConfig,
   DEFAULT_CONFIG,
   KeywordDisplay,
@@ -22,7 +24,11 @@ import {
   saveConfig,
   TextScale,
   Theme,
+  THEMES,
   Zone,
+  ZoneCommon,
+  ZONE_ICONS,
+  ZONE_LABELS,
   listProfiles,
   saveProfile,
   loadProfile,
@@ -33,6 +39,8 @@ import {leavePlugin} from './bubble';
 import {scanKeywords, basename, noteTitle} from './scanner';
 import {APP_BLOCK, CURATED_APPS} from './apps';
 import {Btn, fileGlyph as fileKindGlyph, ui} from './ui';
+import {ClockFace} from './clock';
+import {allClipLabels} from './clips';
 
 const {DashboardNative} = NativeModules;
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o));
@@ -48,7 +56,7 @@ type Modal =
   | {kind: 'kw'; folders: string[]; onPick: (kw: string) => void}
   | {kind: 'profiles'; cfg: DashboardConfig; onLoad: (c: DashboardConfig) => void};
 
-const STEP_TITLES = ['Look', 'Sections', 'Content'];
+const STEP_TITLES = ['Look', 'Sections'];
 const LAST_STEP = STEP_TITLES.length;
 
 export function SettingsScreen(): React.JSX.Element {
@@ -97,8 +105,7 @@ export function SettingsScreen(): React.JSX.Element {
 
       <ScrollView style={{flex: 1}}>
         {step === 1 && <StepLook cfg={cfg} update={update} />}
-        {step === 2 && <StepSections cfg={cfg} update={update} />}
-        {step === 3 && <StepContent cfg={cfg} update={update} openModal={setModal} />}
+        {step === 2 && <StepSections cfg={cfg} update={update} openModal={setModal} />}
       </ScrollView>
 
       <View style={ui.navBar}>
@@ -146,32 +153,62 @@ function GoDashboardBtn({primary}: {primary?: boolean}) {
   );
 }
 
-// ===== Step 1 — Look (Layout + Design + Bubble) ============================
+// ===== Step 1: Look (Layout + Design + Bubble) ============================
+/** Stable RN fontFamily name for a MyStyle font path (must match App.tsx's). */
+function fontFam(path: string): string {
+  let h = 0;
+  for (let i = 0; i < path.length; i++) h = (h * 31 + path.charCodeAt(i)) | 0;
+  return 'udf' + (h >>> 0).toString(36);
+}
+
 function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
-  const cols = cfg.layout === 'grid' ? 2 : 1;
+  const cols = cfg.layout.columns;
+  const setCols = (n: 1 | 2 | 3) =>
+    update(c => {
+      c.layout.columns = n;
+      // A block that lived in a now-removed column falls back into the last one.
+      for (const z of c.zones) if ((z.col ?? 0) > n - 1) z.col = n - 1;
+    });
+  const [fonts, setFonts] = useState<{name: string; path: string}[]>([]);
+  useEffect(() => {
+    DashboardNative.listFonts?.()
+      .then((fs: {name: string; path: string}[]) => {
+        setFonts(fs ?? []);
+        // Register each so its choice below can preview in its own typeface.
+        for (const f of fs ?? []) DashboardNative.registerFont?.(f.path, fontFam(f.path)).catch(() => {});
+      })
+      .catch(() => {});
+  }, []);
   return (
     <View>
-      <Text style={ui.wizStepTag}>Layout</Text>
+      <Text style={ui.wizStepTag}>Layout: columns</Text>
       <View style={ui.snapWrap}>
-        <Snap width={210} on={cfg.layout === 'stack'} label="1 column" onPress={() => update(c => void (c.layout = 'stack'))}>
-          <MiniPage theme={cfg.theme} cols={1} zones={sampleZones} width={210} />
-        </Snap>
-        <Snap width={210} on={cfg.layout === 'grid'} label="2 columns" onPress={() => update(c => void (c.layout = 'grid'))}>
-          <MiniPage theme={cfg.theme} cols={2} zones={sampleZones} width={210} />
-        </Snap>
+        {([1, 2, 3] as const).map(n => (
+          <Snap key={n} width={150} on={cols === n} label={`${n} column${n > 1 ? 's' : ''}`} onPress={() => setCols(n)}>
+            <MiniPage theme={cfg.theme} cols={n} zones={sampleZones} width={150} />
+          </Snap>
+        ))}
       </View>
 
-      <Text style={ui.wizStepTag}>Design — on your {cols === 2 ? '2-column' : '1-column'} layout</Text>
+      <Text style={ui.wizStepTag}>Vertical flow</Text>
+      <Text style={ui.subLabel}>How blocks fill a column: natural height, or a set height that scrolls inside.</Text>
+      <Seg
+        options={[{v: 'masonry', label: 'Masonry'}, {v: 'fixed', label: 'Fixed height'}]}
+        value={cfg.layout.vmode}
+        onChange={v => update(c => void (c.layout.vmode = v as 'masonry' | 'fixed'))}
+      />
+
+      <Text style={ui.wizStepTag}>Design: on your {cols}-column layout</Text>
       <View style={ui.snapWrap}>
-        {(['ledger', 'boxed', 'airy'] as Theme[]).map(t => (
-          <Snap key={t} width={185} on={cfg.theme === t} label={t} onPress={() => update(c => void (c.theme = t))}>
-            <MiniPage theme={t} cols={cols} zones={sampleZones} width={185} />
+        {THEMES.map(t => (
+          <Snap key={t} width={150} on={cfg.theme === t} label={t === 'gridgray' ? 'grid (grey)' : t === 'grid' ? 'grid (black)' : t} onPress={() => update(c => void (c.theme = t))}>
+            <MiniPage theme={t} cols={cols} zones={sampleZones} width={150} />
           </Snap>
         ))}
       </View>
 
       <Text style={ui.wizStepTag}>Bubble</Text>
-      <Text style={ui.subLabel}>The house floats over every screen — tap to open the dashboard, drag to move. Set Off to use only the toolbar SuperDashboard button.</Text>
+      <Text style={ui.subLabel}>The house floats over every screen: tap to open the dashboard, drag to move. Set Off to use only the toolbar SuperDashboard button.</Text>
       <View style={ui.snapWrap}>
         {(['icon', 'off'] as BubbleMode[]).map(m => (
           <Snap
@@ -232,105 +269,241 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
           </TouchableOpacity>
         ))}
       </View>
+
+      <Text style={ui.wizStepTag}>Font</Text>
+      <Text style={ui.subLabel}>Drop .ttf/.otf files into MyStyle/fonts to use your own. Applies to the dashboard text.</Text>
+      <View style={ui.row}>
+        <TouchableOpacity style={[ui.choice, !cfg.font && ui.choiceOn]} onPress={() => update(c => void (c.font = undefined))}>
+          <Text style={[ui.choiceText, !cfg.font && ui.choiceTextOn]}>System default</Text>
+        </TouchableOpacity>
+        {fonts.map(f => (
+          <TouchableOpacity key={f.path} style={[ui.choice, cfg.font === f.path && ui.choiceOn]} onPress={() => update(c => void (c.font = f.path))}>
+            <Text style={[ui.choiceText, {fontFamily: fontFam(f.path)}, cfg.font === f.path && ui.choiceTextOn]}>
+              {f.name.replace(/\.(ttf|otf)$/i, '')}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {fonts.length === 0 && <Text style={ui.subLabel}>No fonts found in MyStyle/fonts.</Text>}
+
+      <Text style={ui.wizStepTag}>Block icons</Text>
+      <Text style={ui.subLabel}>Show each block's type icon (★ # 🕑 …) on its dashboard title.</Text>
+      <Seg
+        options={[{v: 'on', label: 'Show'}, {v: 'off', label: 'Hide'}]}
+        value={cfg.showIcons ? 'on' : 'off'}
+        onChange={v => update(c => void (c.showIcons = v === 'on'))}
+      />
+
+      <Text style={ui.wizStepTag}>Note clips</Text>
+      <Text style={ui.subLabel}>In a note, lasso something and tap “Add to Dashboard” to send it to a Clips block. Optionally mark the captured area on the note.</Text>
+      <Seg
+        options={[{v: 'off', label: 'No frame'}, {v: 'grey', label: 'Grey frame'}, {v: 'black', label: 'Black frame'}]}
+        value={cfg.clipFrame ?? 'off'}
+        onChange={v => update(c => void (c.clipFrame = v as 'off' | 'grey' | 'black'))}
+      />
+
+      <Text style={ui.wizStepTag}>Scanning (Stars &amp; Keywords)</Text>
+      <Seg
+        options={[
+          {v: 'open', label: 'On open'},
+          {v: '6', label: 'Stale > 6h'},
+          {v: '24', label: 'Stale > 24h'},
+          {v: 'off', label: 'Manual'},
+        ]}
+        value={cfg.scan.autoOnOpen ? 'open' : cfg.scan.autoRefreshHours === 0 ? 'off' : String(cfg.scan.autoRefreshHours)}
+        onChange={v =>
+          update(c => {
+            if (v === 'open') {
+              c.scan.autoOnOpen = true;
+            } else {
+              c.scan.autoOnOpen = false;
+              c.scan.autoRefreshHours = v === 'off' ? 0 : Number(v);
+            }
+          })
+        }
+      />
     </View>
   );
 }
 
-// ===== Step 2 — Sections ===================================================
-function StepSections({cfg, update}: {cfg: DashboardConfig; update: UP}) {
-  const cols = cfg.layout === 'grid' ? 2 : 1;
+const ADDABLE: Zone['type'][] = ['shortcuts', 'stars', 'keywords', 'apps', 'recent', 'clock', 'search', 'status', 'nav', 'clips'];
+
+/** Icon + name for a placed block in the canvas. */
+function blockLabel(z: Zone): string {
+  if (z.type === 'spacer') return '▢ empty';
+  const ic = ZONE_ICONS[z.type] ?? '•';
+  return `${ic} ${z.title && z.title !== '' ? z.title : ZONE_LABELS[z.type] ?? z.type}`;
+}
+
+// ===== Step 2: Sections (per-column placement + 🔧 per-block config) =======
+function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: UP; openModal: (m: Modal) => void}) {
+  const columns = cfg.layout.columns;
+  const [openCfg, setOpenCfg] = useState<number | null>(null); // zone index whose 🔧 panel is open
+  const [addingCol, setAddingCol] = useState<number | null>(null); // column whose add-menu is open
+  const colOf = (z: Zone) => Math.max(0, Math.min(columns - 1, z.col ?? 0));
+
   return (
     <View>
       <Text style={ui.wizStepTag}>Live preview</Text>
       <View style={{alignItems: 'center', marginBottom: 14}}>
-        <MiniPage theme={cfg.theme} cols={cols} zones={cfg.zones.map(z => ({type: z.type, title: z.title}))} width={270} />
+        <MiniPage
+          theme={cfg.theme}
+          cols={columns}
+          zones={cfg.zones.map(z => ({type: z.type, title: z.title, col: colOf(z)}))}
+          width={270}
+        />
       </View>
 
-      <Text style={ui.wizStepTag}>Sections (fill the layout in order)</Text>
-      {cfg.zones.map((z, i) => (
-        <View key={i} style={ui.zoneRow}>
-          <Text style={ui.zoneRowText}>
-            {i + 1}. {z.type}
-            {z.title ? ` — ${z.title}` : ''}
-          </Text>
-          <View style={ui.zoneRowBtns}>
-            <Mini label="▲" onPress={() => update(c => moveZone(c, i, -1))} />
-            <Mini label="▼" onPress={() => update(c => moveZone(c, i, 1))} />
-            <Mini label="✕" onPress={() => update(c => void c.zones.splice(i, 1))} />
-          </View>
-        </View>
-      ))}
-      <Text style={ui.subLabel}>Add a section</Text>
-      <View style={ui.row}>
-        {(['shortcuts', 'stars', 'keywords', 'apps', 'recent'] as Zone['type'][]).map(t => (
-          <Btn key={t} label={`＋ ${t}`} onPress={() => update(c => c.zones.push(newZone(t)))} small />
-        ))}
+      <Text style={ui.wizStepTag}>Sections: place blocks per column, 🔧 to configure</Text>
+      <View style={ui.zoneGrid}>
+        {Array.from({length: columns}).map((_, ci) => {
+          const items = cfg.zones.map((z, i) => ({z, i})).filter(({z}) => colOf(z) === ci);
+          return (
+            <View key={ci} style={[ui.zoneCol, ui.colBox, {flex: columns === 3 && ci === 1 ? 1.5 : 1}]}>
+              <Text style={ui.colHead}>Column {ci + 1}</Text>
+              {items.length === 0 && <Text style={ui.empty}>empty</Text>}
+              {items.map(({z, i}) => {
+                // With 1-2 columns each block is wide enough to fit the name and
+                // its controls on one row; with 3 columns keep them stacked.
+                const oneLine = columns <= 2;
+                const ctrls = (
+                  <View style={ui.secCtrls}>
+                    <Mini big label="▲" onPress={() => update(c => moveWithinColumn(c, i, -1))} />
+                    <Mini big label="▼" onPress={() => update(c => moveWithinColumn(c, i, 1))} />
+                    {ci > 0 && <Mini big label="◀" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci - 1))} />}
+                    {ci < columns - 1 && <Mini big label="▶" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci + 1))} />}
+                    <Mini big label="🔧" onPress={() => setOpenCfg(openCfg === i ? null : i)} />
+                    <Mini big label="✕" onPress={() => { setOpenCfg(null); update(c => void c.zones.splice(i, 1)); }} />
+                  </View>
+                );
+                return (
+                  <View key={i} style={ui.secItem}>
+                    {oneLine ? (
+                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <Text style={[ui.secName, {flex: 1, marginBottom: 0, marginRight: 8}]} numberOfLines={1}>{blockLabel(z)}</Text>
+                        {ctrls}
+                      </View>
+                    ) : (
+                      <>
+                        <Text style={ui.secName} numberOfLines={1}>{blockLabel(z)}</Text>
+                        {ctrls}
+                      </>
+                    )}
+                    {openCfg === i && (
+                      <View style={ui.cfgExpander}>
+                        <ZoneContentEditor i={i} zone={z} update={update} openModal={openModal} vmode={cfg.layout.vmode} />
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+              {addingCol === ci ? (
+                <View style={ui.addMenu}>
+                  {ADDABLE.map(t => (
+                    <TouchableOpacity key={t} style={ui.addItem} onPress={() => { setAddingCol(null); update(c => c.zones.push({...newZone(t), col: ci})); }}>
+                      <Text style={ui.addItemIcon}>{ZONE_ICONS[t]}</Text>
+                      <Text style={ui.addItemText}>{ZONE_LABELS[t] ?? t}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity style={ui.addItem} onPress={() => { setAddingCol(null); update(c => c.zones.push({type: 'spacer', col: ci, h: 'M'} as Zone)); }}>
+                    <Text style={ui.addItemIcon}>▢</Text>
+                    <Text style={ui.addItemText}>empty spacer</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[ui.addItem, {borderBottomWidth: 0}]} onPress={() => setAddingCol(null)}>
+                    <Text style={ui.addItemIcon}>✕</Text>
+                    <Text style={[ui.addItemText, {color: '#888888'}]}>cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Mini big label="＋ add block" onPress={() => setAddingCol(ci)} />
+              )}
+            </View>
+          );
+        })}
       </View>
     </View>
   );
 }
 
-// ===== Step 3 — Content ====================================================
-function StepContent({cfg, update, openModal}: {cfg: DashboardConfig; update: UP; openModal: (m: Modal) => void}) {
+/** Reorder a block up/down WITHIN its own column (swaps with the nearest block
+ *  in the same column, ignoring blocks that live in other columns). */
+function moveWithinColumn(c: DashboardConfig, i: number, dir: number) {
+  const col = c.zones[i].col ?? 0;
+  const step = dir < 0 ? -1 : 1;
+  for (let j = i + step; j >= 0 && j < c.zones.length; j += step) {
+    if ((c.zones[j].col ?? 0) === col) {
+      const tmp = c.zones[i];
+      c.zones[i] = c.zones[j];
+      c.zones[j] = tmp;
+      return;
+    }
+  }
+}
+
+// ===== Per-block config (opened by the 🔧 in Step 2) =======================
+function ZoneContentEditor({
+  i,
+  zone: z,
+  update,
+  openModal,
+  vmode,
+}: {
+  i: number;
+  zone: Zone;
+  update: UP;
+  openModal: (m: Modal) => void;
+  vmode: 'masonry' | 'fixed';
+}) {
+  const showHeight = vmode === 'fixed' || z.type === 'spacer';
   return (
     <View>
-      <Text style={ui.wizStepTag}>Refresh (Stars & Keywords)</Text>
-      <View style={ui.row}>
-        <Seg
-          options={[
-            {v: 'open', label: 'On open'},
-            {v: '6', label: 'Stale > 6h'},
-            {v: '24', label: 'Stale > 24h'},
-            {v: 'off', label: 'Manual'},
-          ]}
-          value={cfg.scan.autoOnOpen ? 'open' : cfg.scan.autoRefreshHours === 0 ? 'off' : String(cfg.scan.autoRefreshHours)}
-          onChange={v =>
-            update(c => {
-              if (v === 'open') {c.scan.autoOnOpen = true;}
-              else {c.scan.autoOnOpen = false; c.scan.autoRefreshHours = v === 'off' ? 0 : Number(v);}
-            })
-          }
-        />
-      </View>
-
-      {cfg.zones.length === 0 && <Text style={ui.hint}>No section yet — add some in step 2 (Sections).</Text>}
-      {cfg.zones.map((z, i) => (
-        <View key={i} style={ui.contentCard}>
-          <Text style={ui.zoneRowText}>
-            Section {z.type} #{typeIndex(cfg.zones, i)}
-          </Text>
-          <EditableTitle
-            value={z.title ?? z.type}
-            onSave={t => update(c => void (c.zones[i].title = t || undefined))}
+      {z.type !== 'spacer' && (
+        <EditableTitle value={z.title ?? z.type} onSave={t => update(c => void (c.zones[i].title = t))} />
+      )}
+      {z.type === 'spacer' && (
+        <Text style={ui.subLabel}>An empty block: reserves vertical space and helps line up columns.</Text>
+      )}
+      {z.type === 'shortcuts' && <ShortcutsEditor i={i} zone={z} update={update} openModal={openModal} />}
+      {z.type === 'stars' && (
+        <View>
+          <FoldersEditor i={i} folders={z.folders} update={update} openModal={openModal} what="stars" />
+          <NoteSortRow i={i} value={z.noteSort ?? 'recent'} update={update} />
+          <Text style={ui.subLabel}>Line preview: show each star's line (slower scan)</Text>
+          <Seg
+            options={[
+              {v: 'off', label: 'Off'},
+              {v: 'image', label: 'Image'},
+              {v: 'text', label: 'Text (OCR, image if it fails)'},
+            ]}
+            value={z.lineMode ?? 'off'}
+            onChange={v => update(c => void ((c.zones[i] as any).lineMode = v))}
           />
-          {z.type === 'shortcuts' && <ShortcutsEditor i={i} zone={z} update={update} openModal={openModal} />}
-          {z.type === 'stars' && (
-            <View>
-              <FoldersEditor i={i} folders={z.folders} update={update} openModal={openModal} what="stars" />
-              <NoteSortRow i={i} value={z.noteSort ?? 'recent'} update={update} />
-              <Text style={ui.subLabel}>Line preview — show each star's line (slower scan)</Text>
-              <Seg
-                options={[
-                  {v: 'off', label: 'Off'},
-                  {v: 'image', label: 'Image'},
-                  {v: 'text', label: 'Text (OCR, image if it fails)'},
-                ]}
-                value={z.lineMode ?? 'off'}
-                onChange={v => update(c => void ((c.zones[i] as any).lineMode = v))}
-              />
-              <Text style={ui.subLabel}>Allow deleting a star from the dashboard (✕★, keeps the text)</Text>
-              <Seg
-                options={[{v: 'off', label: 'Off'}, {v: 'on', label: 'On'}]}
-                value={z.canDelete ? 'on' : 'off'}
-                onChange={v => update(c => void ((c.zones[i] as any).canDelete = v === 'on'))}
-              />
-            </View>
-          )}
-          {z.type === 'keywords' && <KeywordsEditor i={i} zone={z} update={update} openModal={openModal} />}
-          {z.type === 'apps' && <AppsEditor i={i} zone={z} update={update} openModal={openModal} />}
-          {z.type === 'recent' && <RecentEditor i={i} zone={z} update={update} />}
+          <Text style={ui.subLabel}>Allow deleting a star from the dashboard (✕★, keeps the text)</Text>
+          <Seg
+            options={[{v: 'off', label: 'Off'}, {v: 'on', label: 'On'}]}
+            value={z.canDelete ? 'on' : 'off'}
+            onChange={v => update(c => void ((c.zones[i] as any).canDelete = v === 'on'))}
+          />
         </View>
-      ))}
+      )}
+      {z.type === 'keywords' && <KeywordsEditor i={i} zone={z} update={update} openModal={openModal} />}
+      {z.type === 'apps' && <AppsEditor i={i} zone={z} update={update} openModal={openModal} />}
+      {z.type === 'recent' && <RecentEditor i={i} zone={z} update={update} />}
+      {z.type === 'clock' && <ClockEditor i={i} zone={z} update={update} />}
+      {z.type === 'search' && <SearchEditor i={i} zone={z} update={update} openModal={openModal} />}
+      {z.type === 'status' && <StatusEditor i={i} zone={z} update={update} />}
+      {z.type === 'nav' && <NavEditor i={i} zone={z} update={update} openModal={openModal} />}
+      {z.type === 'clips' && <ClipsEditor i={i} zone={z} update={update} openModal={openModal} />}
+      {showHeight && (
+        <View>
+          <Text style={ui.subLabel}>Height{vmode === 'masonry' ? ' (empty block)' : ' (Fixed mode: content scrolls inside)'}</Text>
+          <Seg
+            options={[{v: 'S', label: 'Short'}, {v: 'M', label: 'Medium'}, {v: 'L', label: 'Tall'}]}
+            value={z.h ?? 'M'}
+            onChange={v => update(c => void ((c.zones[i] as ZoneCommon).h = v as BlockHeight))}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -387,7 +560,7 @@ function FoldersEditor({i, folders, update, openModal, what}: {i: number; folder
       <Text style={ui.subLabel}>Folders to scan for {what}</Text>
       {empty && (
         <Text style={ui.empty}>
-          No folder selected — the whole device is scanned at each refresh.
+          No folder selected; the whole device is scanned at each refresh.
         </Text>
       )}
       {(folders ?? []).map((f, j) => (
@@ -470,7 +643,7 @@ function AppsEditor({i, zone, update, openModal}: EditorProps<'apps'>) {
 }
 
 // ===== schematic snapshot / preview ========================================
-type MiniZ = {type: Zone['type']; title?: string};
+type MiniZ = {type: Zone['type']; title?: string; col?: number};
 const sampleZones: MiniZ[] = [
   {type: 'shortcuts', title: 'Shortcuts'},
   {type: 'stars', title: 'Stars'},
@@ -491,11 +664,14 @@ function Snap({on, label, width, onPress, children}: {on: boolean; label: string
 function MiniPage({theme, cols, zones, width}: {theme: Theme; cols: number; zones: MiniZ[]; width: number}) {
   const height = Math.round((width * 4) / 3);
   const columns: MiniZ[][] = Array.from({length: cols}, () => []);
-  zones.forEach((z, i) => columns[i % cols].push(z));
+  zones.forEach((z, i) => {
+    const c = typeof z.col === 'number' ? Math.max(0, Math.min(cols - 1, z.col)) : i % cols;
+    columns[c].push(z);
+  });
   return (
     <View style={[ui.miniPage, {width, height}]}>
       <Text style={ui.miniPageTitle}>SuperDashboard</Text>
-      {zones.length === 0 && <Text style={{fontSize: 9, color: '#999', marginTop: 6}}>empty — add sections</Text>}
+      {zones.length === 0 && <Text style={{fontSize: 9, color: '#999', marginTop: 6}}>empty: add sections</Text>}
       <View style={{flexDirection: 'row', flex: 1}}>
         {columns.map((col, ci) => (
           <View key={ci} style={{flex: 1, marginRight: ci < cols - 1 ? 4 : 0}}>
@@ -535,6 +711,49 @@ function MiniZone({theme, label}: {theme: Theme; label: string}) {
       </View>
     );
   }
+  if (theme === 'grid' || theme === 'gridgray') {
+    const line = theme === 'gridgray' ? '#888888' : '#000000';
+    return (
+      <View style={{borderWidth: StyleSheet.hairlineWidth, borderColor: line, borderRadius: 3, marginBottom: 6}}>
+        <View style={{borderBottomWidth: StyleSheet.hairlineWidth, borderColor: line, paddingHorizontal: 4, paddingVertical: 2}}>
+          <Text style={{fontSize: 8, fontWeight: '700', color: line}} numberOfLines={1}>{label.toUpperCase()}</Text>
+        </View>
+        <View style={{padding: 4}}>{lines}</View>
+      </View>
+    );
+  }
+  if (theme === 'compact') {
+    return (
+      <View style={{marginBottom: 6}}>
+        <Text style={[ui.mzLabelText, {borderBottomWidth: 1, borderColor: '#000', paddingBottom: 1, marginBottom: 3}]} numberOfLines={1}>{label}</Text>
+        {lines}
+      </View>
+    );
+  }
+  if (theme === 'card') {
+    return (
+      <View style={{borderWidth: 1, borderColor: '#000', borderRadius: 6, backgroundColor: '#eeeeec', padding: 5, marginBottom: 6}}>
+        <Text style={ui.mzLabelText} numberOfLines={1}>{label}</Text>
+        {lines}
+      </View>
+    );
+  }
+  if (theme === 'minimal') {
+    return (
+      <View style={{marginBottom: 9}}>
+        <Text style={[ui.mzLabelText, {color: '#aaaaaa', fontWeight: '400'}]} numberOfLines={1}>{label}</Text>
+        {lines}
+      </View>
+    );
+  }
+  if (theme === 'underline') {
+    return (
+      <View style={{marginBottom: 8}}>
+        <Text style={[ui.mzLabelText, {borderBottomWidth: 2.5, borderColor: '#000', paddingBottom: 2, marginBottom: 4}]} numberOfLines={1}>{label.toUpperCase()}</Text>
+        {lines}
+      </View>
+    );
+  }
   return (
     <View style={ui.mzAiry}>
       <Text style={[ui.mzLabelText, {color: '#666666'}]} numberOfLines={1}>{label.toUpperCase()}</Text>
@@ -556,15 +775,15 @@ function Seg({options, value, onChange}: {options: {v: string; label: string}[];
   );
 }
 
-const Mini = ({label, onPress}: {label: string; onPress: () => void}) => (
-  <TouchableOpacity style={ui.miniBtn} onPress={onPress}>
-    <Text style={ui.miniBtnText}>{label}</Text>
+const Mini = ({label, onPress, big}: {label: string; onPress: () => void; big?: boolean}) => (
+  <TouchableOpacity style={[ui.miniBtn, big && ui.miniBtnBig]} onPress={onPress}>
+    <Text style={[ui.miniBtnText, big && ui.miniBtnTextBig]}>{label}</Text>
   </TouchableOpacity>
 );
 
 /**
  * Inline title editor. ✎ turns the title into a field; committing happens on the
- * keyboard's Done key OR when the field loses focus — NOT via a button (on the
+ * keyboard's Done key OR when the field loses focus; NOT via a button (on the
  * Supernote the on-screen keyboard covers an inline button, which looked frozen).
  */
 function EditableTitle({value, onSave}: {value: string; onSave: (t: string) => void}) {
@@ -581,7 +800,9 @@ function EditableTitle({value, onSave}: {value: string; onSave: (t: string) => v
     return (
       <View style={[ui.row, {alignItems: 'center', marginTop: 2, marginBottom: 4}]}>
         <Text style={ui.subLabel}>Title to display: </Text>
-        <Text style={[ui.itemText, {fontWeight: '600', marginRight: 6}]}>{value}</Text>
+        <Text style={[ui.itemText, {fontWeight: '600', marginRight: 6, color: value ? '#000000' : '#999999'}]}>
+          {value || '(no title: hidden)'}
+        </Text>
         <Mini label="✎ edit" onPress={() => {setT(value); setEditing(true);}} />
       </View>
     );
@@ -605,12 +826,6 @@ function EditableTitle({value, onSave}: {value: string; onSave: (t: string) => v
   );
 }
 
-/** 1-based index of a zone among zones of the same type. */
-function typeIndex(zones: Zone[], i: number): number {
-  let n = 0;
-  for (let k = 0; k <= i; k++) if (zones[k].type === zones[i].type) n++;
-  return n;
-}
 
 // ===== modals ==============================================================
 function ModalHost({modal, close}: {modal: NonNullable<Modal>; close: () => void}) {
@@ -852,9 +1067,6 @@ function KeywordPicker({folders, onPick, onClose}: {folders: string[]; onPick: (
 }
 
 // ===== helpers =============================================================
-function moveZone(c: DashboardConfig, i: number, dir: number) {
-  moveItem(c.zones, i, dir);
-}
 function moveItem(arr: any[], i: number, dir: number) {
   const j = i + dir;
   if (j < 0 || j >= arr.length) return;
@@ -864,7 +1076,7 @@ function moveItem(arr: any[], i: number, dir: number) {
 function RecentEditor({i, zone, update}: {i: number; zone: Extract<Zone, {type: 'recent'}>; update: UP}) {
   return (
     <View>
-      <Text style={ui.subLabel}>How many (Supernote only tracks the last {RECENT_MAX} opened — {RECENT_MAX} max)</Text>
+      <Text style={ui.subLabel}>How many (Supernote only tracks the last {RECENT_MAX} opened; {RECENT_MAX} max)</Text>
       <Seg
         options={[{v: '3', label: '3'}, {v: '5', label: '5'}, {v: String(RECENT_MAX), label: String(RECENT_MAX)}]}
         value={String(zone.count ?? RECENT_MAX)}
@@ -885,5 +1097,259 @@ function newZone(type: Zone['type']): Zone {
   if (type === 'stars') return {type, title: 'Stars', folders: [], noteSort: 'recent'};
   if (type === 'keywords') return {type, title: 'Keywords', folders: [], sort: 'keyword', display: 'list', noteSort: 'recent'};
   if (type === 'recent') return {type, title: 'Recent', count: RECENT_MAX, display: 'list'};
+  if (type === 'clock') return {type, title: 'Clock', style: 'large', hour24: true};
+  if (type === 'search') return {type, title: 'Search'};
+  if (type === 'status') return {type, title: 'Device', battery: true, storage: true, stats: true};
+  if (type === 'nav') return {type, title: 'Files', root: '/storage/emulated/0/Note'};
+  if (type === 'clips') return {type, title: 'Clips', folders: [], labels: [], display: 'grid'};
   return {type: 'apps', title: 'Apps', apps: []};
+}
+
+/** Signed hour offset → a readable label, e.g. "+5:30" / "-4" / "0". */
+function offsetLabel(offset: number): string {
+  if (!offset) return '0';
+  const sign = offset > 0 ? '+' : '-';
+  const a = Math.abs(offset);
+  const h = Math.floor(a);
+  const m = Math.round((a - h) * 60);
+  return `${sign}${h}${m ? ':' + String(m).padStart(2, '0') : ''}`;
+}
+
+function ClockEditor({i, zone, update}: {i: number; zone: Extract<Zone, {type: 'clock'}>; update: UP}) {
+  const extras = zone.extras ?? [];
+  const patchExtras = (fn: (arr: {label: string; offset: number}[]) => void) =>
+    update(c => {
+      const z = c.zones[i] as any;
+      const arr = Array.isArray(z.extras) ? z.extras.slice() : [];
+      fn(arr);
+      z.extras = arr;
+    });
+  const clampOff = (n: number) => Math.max(-23.5, Math.min(23.5, Math.round(n * 2) / 2));
+  return (
+    <View style={{flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap'}}>
+      <View style={{flex: 1, minWidth: 220}}>
+        <Text style={ui.subLabel}>Style</Text>
+        <View style={ui.row}>
+          {CLOCK_STYLES.map(o => {
+            const on = (zone.style ?? 'large') === o.v;
+            return (
+              <TouchableOpacity
+                key={o.v}
+                style={[ui.choice, {marginRight: 6, marginBottom: 6, paddingVertical: 6, paddingHorizontal: 10}, on && ui.choiceOn]}
+                onPress={() => update(c => void ((c.zones[i] as any).style = o.v))}>
+                <Text style={[ui.choiceText, {fontSize: 13}, on && ui.choiceTextOn]}>{o.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={ui.subLabel}>Time format</Text>
+        <Seg
+          options={[{v: '24', label: '24-hour'}, {v: '12', label: '12-hour'}]}
+          value={zone.hour24 === false ? '12' : '24'}
+          onChange={v => update(c => void ((c.zones[i] as any).hour24 = v === '24'))}
+        />
+        <Text style={ui.subLabel}>Date</Text>
+        <Seg
+          options={[{v: 'on', label: 'Show'}, {v: 'off', label: 'Hide'}]}
+          value={zone.showDate === false ? 'off' : 'on'}
+          onChange={v => update(c => void ((c.zones[i] as any).showDate = v === 'on'))}
+        />
+        <Text style={ui.subLabel}>Week number</Text>
+        <Seg
+          options={[{v: 'off', label: 'Off'}, {v: 'iso', label: 'ISO (Mon)'}, {v: 'us', label: 'US (Sun)'}]}
+          value={zone.weekNum ?? 'off'}
+          onChange={v => update(c => void ((c.zones[i] as any).weekNum = v))}
+        />
+        <Text style={ui.subLabel}>Region format (date order &amp; month/day names)</Text>
+        <View style={ui.row}>
+          {CLOCK_LOCALES.map(l => {
+            const on = (zone.locale ?? '') === l.v;
+            return (
+              <TouchableOpacity
+                key={l.v || 'sys'}
+                style={[ui.choice, {marginRight: 6, marginBottom: 6, paddingVertical: 6, paddingHorizontal: 10}, on && ui.choiceOn]}
+                onPress={() => update(c => void ((c.zones[i] as any).locale = l.v || undefined))}>
+                <Text style={[ui.choiceText, {fontSize: 13}, on && ui.choiceTextOn]}>{l.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={ui.subLabel}>Extra time zones: offset from this device's local time (± hours; ½ adds 30 min)</Text>
+        {extras.map((e, idx) => (
+          <View key={idx} style={{flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
+            <TextInput
+              style={[ui.clipInput, {flex: 1, marginTop: 0, marginRight: 6}]}
+              value={e.label}
+              onChangeText={t => patchExtras(a => void (a[idx] = {...a[idx], label: t}))}
+              autoCapitalize="none"
+              placeholder="e.g. New York"
+              placeholderTextColor="#9a9a9a"
+            />
+            <Mini big label="-" onPress={() => patchExtras(a => void (a[idx] = {...a[idx], offset: clampOff(a[idx].offset - 1)}))} />
+            <Text style={{minWidth: 44, textAlign: 'center', fontSize: 14, fontWeight: '700', color: '#000000', fontVariant: ['tabular-nums']}}>{offsetLabel(e.offset)}</Text>
+            <Mini big label="+" onPress={() => patchExtras(a => void (a[idx] = {...a[idx], offset: clampOff(a[idx].offset + 1)}))} />
+            <Mini big label="½" onPress={() => patchExtras(a => void (a[idx] = {...a[idx], offset: clampOff((a[idx].offset % 1 ? Math.trunc(a[idx].offset) : a[idx].offset + (a[idx].offset < 0 ? -0.5 : 0.5)))}))} />
+            <Mini big label="✕" onPress={() => patchExtras(a => void a.splice(idx, 1))} />
+          </View>
+        ))}
+        {extras.length < 6 && (
+          <Mini big label="＋ add time zone" onPress={() => patchExtras(a => void a.push({label: '', offset: 1}))} />
+        )}
+      </View>
+      <View style={ui.clockPreview}>
+        <Text style={[ui.subLabel, {marginTop: 0}]}>Preview</Text>
+        <ClockFace
+          style={zone.style ?? 'large'}
+          hour24={zone.hour24 !== false}
+          s={0.85}
+          locale={zone.locale}
+          showDate={zone.showDate !== false}
+          weekNum={zone.weekNum ?? 'off'}
+          extras={extras}
+        />
+      </View>
+    </View>
+  );
+}
+
+/** Clock face presets (item labels shown in Settings). */
+const CLOCK_STYLES: {v: ClockStyle; label: string}[] = [
+  {v: 'large', label: 'Large'},
+  {v: 'compact', label: 'Compact'},
+  {v: 'weekday', label: 'Weekday'},
+  {v: 'jumbo', label: 'Jumbo'},
+  {v: 'mono', label: 'Digital'},
+  {v: 'stamp', label: 'Stamp'},
+];
+
+/** Region presets for the clock (BCP-47). '' = follow the device. */
+const CLOCK_LOCALES: {v: string; label: string}[] = [
+  {v: '', label: 'System'},
+  {v: 'en-US', label: 'US'},
+  {v: 'en-GB', label: 'UK'},
+  {v: 'fr-FR', label: 'FR'},
+  {v: 'de-DE', label: 'DE'},
+  {v: 'es-ES', label: 'ES'},
+  {v: 'it-IT', label: 'IT'},
+  {v: 'pt-BR', label: 'BR'},
+  {v: 'nl-NL', label: 'NL'},
+  {v: 'ja-JP', label: 'JP'},
+  {v: 'zh-CN', label: 'CN'},
+  {v: 'ko-KR', label: 'KR'},
+];
+
+function SearchEditor({i, zone, update, openModal}: EditorProps<'search'>) {
+  return (
+    <View>
+      <Text style={ui.subLabel}>
+        Searches file &amp; folder names + keywords from scanned notes. Grammar: "phrase" · =exact · a|b · !exclude ·
+        f:folder · kw:only · star: · type:note|pdf|doc|folder · approx:
+      </Text>
+      <Text style={ui.subLabel}>Scope: folders to include (leave empty to search the whole device)</Text>
+      <FoldersEditor i={i} folders={zone.folders ?? []} update={update} openModal={openModal} what="search" />
+    </View>
+  );
+}
+
+function StatusEditor({i, zone, update}: {i: number; zone: Extract<Zone, {type: 'status'}>; update: UP}) {
+  const toggle = (key: 'battery' | 'storage' | 'stats', label: string) => (
+    <View>
+      <Text style={ui.subLabel}>{label}</Text>
+      <Seg
+        options={[{v: 'on', label: 'Show'}, {v: 'off', label: 'Hide'}]}
+        value={zone[key] ? 'on' : 'off'}
+        onChange={v => update(c => void ((c.zones[i] as any)[key] = v === 'on'))}
+      />
+    </View>
+  );
+  return (
+    <View>
+      {toggle('battery', 'Battery')}
+      {toggle('storage', 'Free storage (internal + SD card)')}
+      {toggle('stats', 'Stats (notes · stars · keywords)')}
+    </View>
+  );
+}
+
+function NavEditor({i, zone, update, openModal}: EditorProps<'nav'>) {
+  return (
+    <View>
+      <Text style={ui.subLabel}>Root folder: the browser starts here</Text>
+      <View style={ui.itemRow}>
+        <Text style={ui.itemText} numberOfLines={1}>{zone.root || '/storage/emulated/0'}</Text>
+        <Mini
+          label="✎ set"
+          onPress={() =>
+            openModal({
+              kind: 'shortcuts',
+              foldersOnly: true,
+              onDone: picks => {
+                const p = picks[0];
+                if (p) update(c => void ((c.zones[i] as any).root = p.path));
+              },
+            })
+          }
+        />
+      </View>
+    </View>
+  );
+}
+
+function ClipsEditor({i, zone, update, openModal}: EditorProps<'clips'>) {
+  const [labels, setLabels] = useState<string[]>([]);
+  useEffect(() => {
+    allClipLabels().then(setLabels).catch(() => {});
+  }, []);
+  const sel = zone.labels ?? [];
+  const toggleLabel = (l: string) =>
+    update(c => {
+      const z = c.zones[i] as any;
+      const set = new Set<string>(z.labels ?? []);
+      if (set.has(l)) set.delete(l);
+      else set.add(l);
+      z.labels = [...set];
+    });
+  return (
+    <View>
+      <Text style={ui.subLabel}>Layout</Text>
+      <Seg
+        options={[{v: 'grid', label: 'Grid'}, {v: 'list', label: 'List'}]}
+        value={zone.display ?? 'grid'}
+        onChange={v => update(c => void ((c.zones[i] as any).display = v))}
+      />
+      <Text style={ui.subLabel}>Thumbnail size</Text>
+      <Seg
+        options={[{v: 'S', label: 'Small'}, {v: 'M', label: 'Medium'}, {v: 'L', label: 'Large'}]}
+        value={zone.size ?? 'M'}
+        onChange={v => update(c => void ((c.zones[i] as any).size = v))}
+      />
+      <Text style={ui.subLabel}>Sort</Text>
+      <Seg
+        options={[{v: 'new', label: 'Newest'}, {v: 'old', label: 'Oldest'}, {v: 'label', label: 'Label'}, {v: 'note', label: 'Note'}]}
+        value={zone.sort ?? 'new'}
+        onChange={v => update(c => void ((c.zones[i] as any).sort = v))}
+      />
+      <Text style={ui.subLabel}>Filter: source folders (empty = all)</Text>
+      <FoldersEditor i={i} folders={zone.folders ?? []} update={update} openModal={openModal} what="clips" />
+      <Text style={ui.subLabel}>Filter: labels (empty = all)</Text>
+      {labels.length === 0 ? (
+        <Text style={ui.subLabel}>No labels yet: add labels to clips on the dashboard.</Text>
+      ) : (
+        <View style={ui.row}>
+          {labels.map(l => {
+            const on = sel.includes(l);
+            return (
+              <TouchableOpacity
+                key={l}
+                style={[ui.choice, {marginRight: 6, marginBottom: 6, paddingVertical: 6, paddingHorizontal: 10}, on && ui.choiceOn]}
+                onPress={() => toggleLabel(l)}>
+                <Text style={[ui.choiceText, {fontSize: 13}, on && ui.choiceTextOn]}>{l}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
 }
