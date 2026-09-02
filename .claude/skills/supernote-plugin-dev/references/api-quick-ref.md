@@ -20,6 +20,8 @@ import { PluginManager } from 'sn-plugin-lib';
 | `getDeviceType()` | `Promise<number>` | Device type: 0=A5, 1=A6, 2=A6X, 3=A5X, 4=Nomad, 5=Manta |
 | `closePluginView()` | `Promise<boolean>` | Close the plugin UI container |
 | `showPluginView()` | `Promise<boolean>` | Show the plugin view while running in background. Added in 0.1.43. |
+| `hasPermission(name)` | `Promise<number>` | 0.1.65+. `1` = granted. Query a `plugin.permission.*` before a gated op. Throws error `1500` if `name` isn't declared in `PluginConfig.json` `uses-permissions`. See Pattern 17. |
+| `requestPermission(name, desc?)` | `Promise<number>` | 0.1.65+. Prompt the user. Returns `1` = this session only (revoked on exit), `2` = always, `0` = deny, `-1` = dismissed. `desc` customizes only the already-denied dialog copy. |
 
 ### Button Registration
 
@@ -193,6 +195,7 @@ import { PluginCommAPI } from 'sn-plugin-lib';
 |--------|-----------|-------|
 | `getCurrentPageNum` | `() → APIResponse<number>` | Current page number. |
 | `getCurrentFilePath` | `() → APIResponse<string>` | Currently open file path. |
+| `getPageDisplaySize` | `() → APIResponse<Size>` | Current file's page size in pixels. **Ungated** (unlike `PluginFileAPI.getPageSize`), takes no `filePath`. Prefer it for page-element CRUD coordinate conversion and whenever you only need the open file's size (0.1.65+). |
 | `reloadFile` | `() → APIResponse<boolean>` | Reload currently opened file. |
 | `getPenInfo` | `() → APIResponse<PenInfo>` | Get currently selected pen type in the app. |
 
@@ -244,7 +247,7 @@ import { PluginFileAPI } from 'sn-plugin-lib';
 | Method | Signature | Notes |
 |--------|-----------|-------|
 | `getNoteTotalPageNum` | `(filePath) → APIResponse<number>` | Total pages. |
-| `getPageSize` | `(filePath, pageNum) → APIResponse<Size>` | Page size in pixels. Needed for coordinate conversion. |
+| `getPageSize` | `(filePath, pageNum) → APIResponse<Size>` | Page size in pixels for any file. ⚠️ `FILE:READ`-gated on Chauvet 3.29.43+ — **silently** returns an unusable result if the permission isn't declared (see gotcha #38). For the current file, prefer the ungated `PluginCommAPI.getPageDisplaySize()`. |
 | `insertNotePage` | `({notePath, page, template}) → APIResponse<boolean>` | Insert a new page after `page`. |
 | `removeNotePage` | `(filePath, pageNum) → APIResponse<boolean>` | Remove a page. |
 | `createNote` | `({notePath, template, mode, isPortrait}) → APIResponse<boolean>` | Create new note file. `mode`: 0=normal, 1=recognition. `template`: system template name OR custom template image path. |

@@ -392,3 +392,41 @@ useEffect(() => {
 ## Pattern 16: Scoped Pen Disable Around a Pen Operation
 
 → See [`pen-emr.md`](pen-emr.md) for the engage/release recipe, dual-pipeline explanation, and timing requirements.
+
+## Pattern 17: Requesting Permissions Before Access (0.1.65+)
+
+On Chauvet 3.29.43+ / 2.26.40+, `FILE:READ`/`FILE:WRITE`/`FILE:DELETE`/`INTERNET` are gated at
+runtime for anything outside the plugin's own private data dir. Shared storage covers six dirs:
+`Document`, `EXPORT`, `INBOX`, `MyStyle`, `Note`, `SCREENSHOT` (external SD/OTG too). Enforcement
+is at the OS layer, so even raw `java.io` reads and native sockets are blocked, not just SDK calls.
+
+Two rules:
+1. **Declare the permission in `PluginConfig.json`'s `uses-permissions` first.** Calling
+   `hasPermission`/`requestPermission` for an *undeclared* permission throws (error `1500`), and an
+   undeclared file/socket op is silently blocked (`PluginSec: DENY ...` / `SocketException: has no
+   NETWORK permission` in `adb logcat`, not surfaced to JS — see gotcha #38).
+2. **Request it once, in context**, right before the first access, so the dialog makes sense.
+
+```ts
+import { PluginManager } from 'sn-plugin-lib';
+
+async function ensurePermission(name: string): Promise<boolean> {
+  if ((await PluginManager.hasPermission(name)) === 1) return true;   // already granted
+  const choice = await PluginManager.requestPermission(
+    name,
+    // `desc` customizes ONLY the "previously denied" dialog copy; ignored otherwise.
+  );
+  return choice === 1 || choice === 2;                                // see codes below
+}
+
+// e.g. before the first scan of the user's notes:
+const ok = await ensurePermission('plugin.permission.FILE:READ');
+```
+
+**Return codes**: `1` = allow this session only (revoked on plugin exit — re-check with
+`hasPermission` next launch, never cache across sessions), `2` = allow always, `0` = deny,
+`-1` = dialog dismissed (treated as deny, but reappears next call — surface a UI affordance, don't
+loop-retry). Operations that stay inside the currently-open file via `PluginCommAPI`
+(`lassoElements`, `setLassoBoxState`, `getPageDisplaySize`, ...) need none of this — it matters
+only once a feature touches arbitrary paths or opens a socket. Least privilege is also what the
+store reviewer checks: see [`publish-review.md`](publish-review.md).
