@@ -201,6 +201,8 @@ handwriting is kept), after a confirmation.
 
 ![Clock faces](docs/img/clock-styles.png)
 
+![A Clock block's settings: style, time format, date, week number, region, extra time zones](docs/img/clock-config.png)
+
 A Clock block shows the time, and (optionally) the date and week number. In its **🔧**:
 
 - **Style**: **Large, Compact, Weekday, Jumbo, Digital** (a 7-segment display face) or **Stamp**.
@@ -233,27 +235,80 @@ A Device block shows, each independently toggleable in its **🔧**:
 Note Clips let you pin a snippet of a note onto the dashboard.
 
 1. In a **note**, lasso a region as usual.
-2. In the lasso toolbar, tap **"Add to Dashboard"**. It's captured **silently** (no plugin view
+2. In the lasso toolbar, tap **"Clip to Dashboard"**. It's captured **silently** (no plugin view
    opens), so it never interrupts your writing.
 3. The snippet appears as a thumbnail in a **Clips** block. **Tap it to jump back to its exact source
    note and page.**
 
+**Auto-label by underlining.** When you lasso a snippet, if it contains a word **underlined with the
+straight-line tool** (the clean shape line, not a free-hand stroke), the plugin recognises that word
+on-device and uses it as the clip's **label** automatically; a toast confirms it (`✓ Added · <word>`).
+No underline means no OCR and no delay: an ordinary capture is untouched. You can always fix the label
+afterward with **🏷 Label**.
+
+**OCR clips to text (optional).** Turn on **OCR text** in Step 1 - Look : Note clips. Clips are still
+captured as handwriting and you keep control immediately; the recognition runs **in the background**
+right after each capture and stores the text on the clip (empty/failed OCR keeps the image, like the
+Stars text mode). Then, per Clips block, choose **Display: Handwriting / OCR text / Both** (block's
+**🔧**). Pasting an OCR clip inserts an **editable text box** instead of an image; its **font** (your
+MyStyle fonts) and **size** are set in Look : Note clips. If a block is set to OCR/Both but the global
+**OCR text** is off, the block editor shows a reminder (no text is produced until you enable it).
+
+![A Clips block's settings: display (handwriting / OCR text / both), size, sort, filters](docs/img/clips-config.png)
+
+Each clip is a small **card**: a header showing its **source note / page** and **labels**, and a body
+with the content and the actions. **Tap the header** to collapse or expand the card (per session), so a
+long list reads as a compact index. **Tap the content** to jump to the source page.
+
+![Clips on the dashboard: cards with source, labels, handwriting and OCR text](docs/img/clips-dashboard.png)
+
+![The block's label filter, several chips selected (OR)](docs/img/clips-filter.png)
+
 Managing clips (on the dashboard and in the Clips block's **🔧**):
 
-- **Labels**: tap **🏷** on a clip to add or remove labels; it reuses labels you already created, so
-  they stay consistent.
-- **Filter** a Clips block by **source folder** and/or **label**, so you can have several Clips blocks,
-  each showing a different set.
-- **Sort**: Newest, Oldest, by Label, or by Note.
+- **Display**: **Handwriting** (image), **OCR text**, or **Both** (needs global OCR on, above).
+- **Label filter (in the block header)**: chips list every label present in the block, plus a grey
+  **no label** chip. Tap chips to show only matching clips; **several chips combine with OR** (any of
+  them). Tap again to deselect; none selected shows all.
+- **🏷 Label**: add or remove labels on a clip; it reuses labels you already created, so they stay
+  consistent.
+- **Filter (in config)** a Clips block by **source folder** and/or **label**, so you can have several
+  Clips blocks, each showing a different set.
+- **Sort**: Newest, Oldest, by Label, or by Note. **By Note** groups the clips under a per-note header
+  (the same layout as the Stars block).
 - **Thumbnail size**: Small, Medium or Large. A clip is never shown larger than the original snippet.
+  (In a 2- or 3-column dashboard, clips fill the block's full width.)
 - **Frame** (chosen in Step 1 - Look): optionally draw a **grey** or **black** rectangle on the note
   around what you captured, so you can see on the note what was clipped. That mark is a permanent part
   of the note (deleting the clip does not erase it).
-- **Delete**: the **✕** on a clip removes it from the dashboard (after a confirmation). It's pushed to
-  the far right of the row so you won't hit it by accident.
+- **✕ Delete**: removes the clip from the dashboard (after a confirmation). It's pushed to the far
+  right of the row so you won't hit it by accident.
 
-Good to know: up to **200** clips are kept (the oldest drop off after that), and capture works on
-**notes only** (the lasso toolbar isn't available in PDFs).
+### Pasting a clip back into a note
+
+Tap **📋 Paste** on a clip to drop it into the note you currently have open (open the note first, then
+raise the dashboard from the bubble). A handwriting clip is inserted **as an image**; an OCR clip is
+inserted **as an editable text box** (in your chosen font and size). Both land **centred on the page**,
+with a small **"↩ source" link** just under them that jumps back to the note and page the clip came
+from.
+
+![An OCR clip pasted as an editable text box, with its "↩ source" backlink](docs/img/clip-paste.png)
+
+- **Moving / resizing**: lasso the pasted element and drag or scale it. A text box stays editable.
+- **Deleting**: an inserted **image** is not removed by the **eraser** (the eraser removes handwriting
+  and text boxes, not images); to remove it, **lasso-select it and choose Delete**. A pasted **text
+  box** can be erased or lasso-deleted like any text box. This is standard Supernote behaviour.
+- **The backlink follows the page.** The dashboard thumbnail follows the source page even if you later
+  **reorder** it, or **move it to another note**: the plugin reads the note's stable page IDs from the
+  `.note` file and re-resolves the current location on the fly, self-healing the stored pointer when a
+  page has moved. The inserted **"↩ source"** link is a native Supernote link, so the firmware follows
+  it within the note too.
+- **First open after a cross-note move is a little slower** (the plugin scans recent notes to find where
+  the page went), then instant afterward. If a page is deleted outright, the pointer falls back to the
+  page number captured at clip time.
+
+Good to know: up to **200** clips are kept (the oldest drop off after that); capture works on **notes
+only** (the lasso toolbar isn't available in PDFs); and pasting is available in **notes only** too.
 
 ---
 

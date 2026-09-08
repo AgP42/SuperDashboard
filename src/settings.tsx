@@ -295,12 +295,41 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
       />
 
       <Text style={ui.wizStepTag}>Note clips</Text>
-      <Text style={ui.subLabel}>In a note, lasso something and tap “Add to Dashboard” to send it to a Clips block. Optionally mark the captured area on the note.</Text>
+      <Text style={ui.subLabel}>In a note, lasso something and tap “Clip to Dashboard” to send it to a Clips block. Optionally mark the captured area on the note.</Text>
       <Seg
         options={[{v: 'off', label: 'No frame'}, {v: 'grey', label: 'Grey frame'}, {v: 'black', label: 'Black frame'}]}
         value={cfg.clipFrame ?? 'off'}
         onChange={v => update(c => void (c.clipFrame = v as 'off' | 'grey' | 'black'))}
       />
+      <Text style={ui.subLabel}>Keep the handwriting (image), or OCR the clip to text you can paste as an editable text box (falls back to the image when OCR finds nothing).</Text>
+      <Seg
+        options={[{v: 'hand', label: 'Handwriting'}, {v: 'ocr', label: 'OCR text'}]}
+        value={cfg.clipText ?? 'hand'}
+        onChange={v => update(c => void (c.clipText = v as 'hand' | 'ocr'))}
+      />
+      {(cfg.clipText ?? 'hand') === 'ocr' && (
+        <>
+          <Text style={ui.subLabel}>Pasted text size.</Text>
+          <Seg
+            options={[{v: '28', label: 'S'}, {v: '36', label: 'M'}, {v: '48', label: 'L'}]}
+            value={String(cfg.clipFontSize ?? 36)}
+            onChange={v => update(c => void (c.clipFontSize = parseInt(v, 10)))}
+          />
+          <Text style={ui.subLabel}>Pasted text font (MyStyle/fonts).</Text>
+          <View style={ui.row}>
+            <TouchableOpacity style={[ui.choice, !cfg.clipFontPath && ui.choiceOn]} onPress={() => update(c => void (c.clipFontPath = undefined))}>
+              <Text style={[ui.choiceText, !cfg.clipFontPath && ui.choiceTextOn]}>Default</Text>
+            </TouchableOpacity>
+            {fonts.map(f => (
+              <TouchableOpacity key={f.path} style={[ui.choice, cfg.clipFontPath === f.path && ui.choiceOn]} onPress={() => update(c => void (c.clipFontPath = f.path))}>
+                <Text style={[ui.choiceText, {fontFamily: fontFam(f.path)}, cfg.clipFontPath === f.path && ui.choiceTextOn]}>
+                  {f.name.replace(/\.(ttf|otf)$/i, '')}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
 
       <Text style={ui.wizStepTag}>Scanning (Stars &amp; Keywords)</Text>
       <Seg
@@ -391,7 +420,7 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
                     )}
                     {openCfg === i && (
                       <View style={ui.cfgExpander}>
-                        <ZoneContentEditor i={i} zone={z} update={update} openModal={openModal} vmode={cfg.layout.vmode} />
+                        <ZoneContentEditor i={i} zone={z} update={update} openModal={openModal} vmode={cfg.layout.vmode} ocrGlobal={(cfg.clipText ?? 'hand') === 'ocr'} />
                       </View>
                     )}
                   </View>
@@ -447,12 +476,14 @@ function ZoneContentEditor({
   update,
   openModal,
   vmode,
+  ocrGlobal,
 }: {
   i: number;
   zone: Zone;
   update: UP;
   openModal: (m: Modal) => void;
   vmode: 'masonry' | 'fixed';
+  ocrGlobal: boolean;
 }) {
   const showHeight = vmode === 'fixed' || z.type === 'spacer';
   return (
@@ -493,7 +524,7 @@ function ZoneContentEditor({
       {z.type === 'search' && <SearchEditor i={i} zone={z} update={update} openModal={openModal} />}
       {z.type === 'status' && <StatusEditor i={i} zone={z} update={update} />}
       {z.type === 'nav' && <NavEditor i={i} zone={z} update={update} openModal={openModal} />}
-      {z.type === 'clips' && <ClipsEditor i={i} zone={z} update={update} openModal={openModal} />}
+      {z.type === 'clips' && <ClipsEditor i={i} zone={z} update={update} openModal={openModal} ocrGlobal={ocrGlobal} />}
       {showHeight && (
         <View>
           <Text style={ui.subLabel}>Height{vmode === 'masonry' ? ' (empty block)' : ' (Fixed mode: content scrolls inside)'}</Text>
@@ -1296,7 +1327,7 @@ function NavEditor({i, zone, update, openModal}: EditorProps<'nav'>) {
   );
 }
 
-function ClipsEditor({i, zone, update, openModal}: EditorProps<'clips'>) {
+function ClipsEditor({i, zone, update, openModal, ocrGlobal}: EditorProps<'clips'> & {ocrGlobal: boolean}) {
   const [labels, setLabels] = useState<string[]>([]);
   useEffect(() => {
     allClipLabels().then(setLabels).catch(() => {});
@@ -1330,6 +1361,17 @@ function ClipsEditor({i, zone, update, openModal}: EditorProps<'clips'>) {
         value={zone.sort ?? 'new'}
         onChange={v => update(c => void ((c.zones[i] as any).sort = v))}
       />
+      <Text style={ui.subLabel}>Display</Text>
+      <Seg
+        options={[{v: 'hand', label: 'Handwriting'}, {v: 'ocr', label: 'OCR text'}, {v: 'both', label: 'Both'}]}
+        value={zone.textMode ?? 'hand'}
+        onChange={v => update(c => void ((c.zones[i] as any).textMode = v))}
+      />
+      {(zone.textMode ?? 'hand') !== 'hand' && !ocrGlobal && (
+        <Text style={[ui.subLabel, {color: '#b00000'}]}>
+          ⚠ Turn on “OCR text” in Look : Note clips so clips actually get text; otherwise this block just shows the handwriting image.
+        </Text>
+      )}
       <Text style={ui.subLabel}>Filter: source folders (empty = all)</Text>
       <FoldersEditor i={i} folders={zone.folders ?? []} update={update} openModal={openModal} what="clips" />
       <Text style={ui.subLabel}>Filter: labels (empty = all)</Text>

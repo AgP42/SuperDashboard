@@ -13,7 +13,9 @@ import {setRoute} from './src/route';
 import {showBubbleFromConfig} from './src/bubble';
 import {hasSavedConfig, loadConfig} from './src/config';
 import {ensureFilePermissions} from './src/permissions';
-import {addClip, clipId} from './src/clips';
+import {addClip, clipId, updateClipText} from './src/clips';
+import {detectUnderlineLabels} from './src/underline';
+import {pageIdAt} from './src/notepage';
 import {cacheDir} from './src/paths';
 import {DIGITAL_FONT, DSEG7_BOLD_B64} from './src/fonts/dseg7';
 
@@ -187,6 +189,22 @@ async function drawClipFrame(rect, style) {
 /** Save the current lasso selection as an image clip, backlinked to its page.
  *  Headless: no plugin view is opened (frictionless collection). */
 async function handleLassoToClip() {
+  // `els` (the captured strokes) are kept alive for the underline-label OCR and
+  // the OPTIONAL background OCR, then freed EXACTLY ONCE on every exit path via
+  // recycleEls() (recognizeElements is element-based, so it still works on them
+  // after the lasso is dismissed). Declared at function scope so the catch can
+  // free them too.
+  let els = [];
+  let elsRecycled = false;
+  const recycleEls = () => {
+    if (elsRecycled) return;
+    elsRecycled = true;
+    for (const e of els) {
+      try {
+        e && e.recycle && e.recycle();
+      } catch {}
+    }
+  };
   try {
     await ensureFilePermissions();
     const path = unwrapR(await PluginCommAPI.getCurrentFilePath());
@@ -200,22 +218,47 @@ async function handleLassoToClip() {
     const pageRaw = unwrapR(await PluginCommAPI.getCurrentPageNum());
     const page = typeof pageRaw === 'number' ? pageRaw : -1;
     const elR = await PluginCommAPI.getLassoElements();
-    const els = elR && elR.success ? elR.result : [];
+    els = elR && elR.success ? elR.result : [];
     if (!els || els.length === 0) {
       ToastAndroid.show('Nothing selected', ToastAndroid.SHORT);
       return;
     }
-    for (const e of els) {
+
+    // Load config once (clip content mode + frame) and the page size (reused by
+    // the OCR pass and the underline-label detector).
+    let cfg = null;
+    try {
+      cfg = await loadConfig();
+    } catch {}
+    let ps = null;
+    try {
+      ps = unwrapR(await PluginCommAPI.getPageDisplaySize());
+    } catch {}
+
+    // Stable PAGEID of the source page (parsed from the .note file), so the
+    // backlink can FOLLOW this page if it's later reordered/moved, instead of
+    // sticking to the page number. After the "nothing selected" guard so an
+    // empty mis-tap pays no file read. Best-effort: '' falls back to the number.
+    let sourcePageId = '';
+    try {
+      sourcePageId = await pageIdAt(path, page);
+    } catch {}
+
+    // Optional auto-labels: each word the user underlined with the clean
+    // straight-line tool becomes a label (three underlines → three labels). Runs
+    // only when such a line is in the selection (otherwise instant no-op), and
+    // must happen while the lasso is still active (before setLassoBoxState).
+    let autoLabels = [];
+    if (ps && ps.width) {
       try {
-        e && e.recycle && e.recycle();
-      } catch {}
+        autoLabels = await detectUnderlineLabels(ps, els);
+      } catch (e) {
+        blog(`[clip] underline: ${e && e.message}`);
+      }
     }
 
-    // Optional frame: read the setting, and grab the bounds BEFORE dismissing.
-    let frame = 'off';
-    try {
-      frame = (await loadConfig()).clipFrame || 'off';
-    } catch {}
+    // Optional frame: reuse the loaded config, and grab the bounds BEFORE dismissing.
+    let frame = (cfg && cfg.clipFrame) || 'off';
     let rect = null;
     if (frame !== 'off') {
       try {
@@ -234,6 +277,7 @@ async function handleLassoToClip() {
     if (!(sr && sr.success)) {
       blog(`[clip] saveStickerByLasso failed: ${sr && sr.error && sr.error.message}`);
       ToastAndroid.show('Clip failed', ToastAndroid.SHORT);
+      recycleEls();
       return;
     }
     let size = {width: 480, height: 320};
@@ -244,7 +288,10 @@ async function handleLassoToClip() {
       blog(`[clip] getStickerSize: ${e && e.message}`);
     }
     await PluginCommAPI.generateStickerThumbnail(stickerPath, pngPath, size);
-    // The .sticker was only an intermediate; drop it, keep the PNG.
+    // The .sticker was only an intermediate for the PNG; drop it. Pasting a clip
+    // back into a note uses the PNG (insertImage → a normal Picture element):
+    // the vector sticker path (insertSticker) squashes vertically on every
+    // move/resize, so we deliberately paste raster instead.
     try {
       await DashboardNative?.pruneMatching?.(dir, `clip_${id}.sticker`, '');
     } catch {}
@@ -257,13 +304,47 @@ async function handleLassoToClip() {
     }
 
     // Store the clip's real pixel size so the dashboard renders it at natural
-    // size (never upscaled larger than the original extract).
-    await addClip({id, png: pngPath, sourcePath: path, sourcePage: page, w: size.width, h: size.height, labels: [], createdAt: Date.now()});
-    blog(`[clip] added ${id} from ${path} p.${page}`);
-    ToastAndroid.show('✓ Added to Dashboard', ToastAndroid.SHORT);
+    // size (never upscaled larger than the original extract). Added WITHOUT text
+    // first, so the clip appears immediately and the user has control back; the
+    // optional OCR (below) fills the text in a moment later.
+    await addClip({id, png: pngPath, sourcePath: path, sourcePage: page, sourcePageId: sourcePageId || undefined, w: size.width, h: size.height, labels: autoLabels, createdAt: Date.now()});
+    blog(`[clip] added ${id} from ${path} p.${page}${autoLabels.length ? ` labels="${autoLabels.join(', ')}"` : ''}`);
+    ToastAndroid.show(autoLabels.length ? `✓ Added · ${autoLabels.join(', ')}` : '✓ Added to Dashboard', ToastAndroid.SHORT);
+
+    // Background OCR (opt-in): control is already back with the user (toast
+    // shown, lasso dismissed). Recognize the CAPTURED strokes (the snapshot, not
+    // the source note), store the text so the dashboard shows/pastes it as text.
+    // Empty/failed OCR leaves the clip as an image (fallback, like Stars 'text').
+    // If OCR is off, just free the held elements now.
+    if (cfg && cfg.clipText === 'ocr' && ps && ps.width) {
+      (async () => {
+        try {
+          const SHAPES = [700, 800]; // drop geometry + five-star so a stray line can't suppress text
+          const textEls = els.filter(e => e && !SHAPES.includes(e.type));
+          if (textEls.length) {
+            const r = await PluginCommAPI.recognizeElements(textEls, ps);
+            const txt = r && r.success ? (r.result || '').trim() : '';
+            if (txt) {
+              await updateClipText(id, txt);
+              DeviceEventEmitter.emit('dashboard_refresh_all'); // if the dashboard is open, swap to text
+              blog(`[clip] ocr ok ${id} (${txt.length} chars) "${txt.slice(0, 80)}"`);
+            } else {
+              blog(`[clip] ocr empty ${id} -> image fallback`);
+            }
+          }
+        } catch (e) {
+          blog(`[clip] ocr: ${e && e.message}`);
+        } finally {
+          recycleEls();
+        }
+      })();
+    } else {
+      recycleEls();
+    }
   } catch (e) {
     blog(`[clip] err: ${e && e.message}`);
     ToastAndroid.show(`Clip error: ${e && e.message}`, ToastAndroid.SHORT);
+    recycleEls();
   }
 }
 
@@ -278,9 +359,14 @@ PluginManager.registerButton(1, ['NOTE', 'DOC'], {
 // = headless: we capture in onButtonPress without opening the plugin view.
 PluginManager.registerButton(2, ['NOTE'], {
   id: LASSO_BTN,
-  name: 'Add to Dashboard',
+  name: 'Clip to Dashboard',
   icon: Image.resolveAssetSource(require('./assets/icon.png')).uri,
-  editDataTypes: [0, 1, 2, 3, 4],
+  // Lasso data types that KEEP this button enabled: 0=stroke, 1=title,
+  // 2=picture, 3=text, 4=link, 5=geometry. The firmware greys the button out if
+  // the selection contains ANY type not listed here, so geometry (5) is
+  // required: without it a selection that includes a shape/line (e.g. the clean
+  // underline used for auto-labels) disables "Add to Dashboard".
+  editDataTypes: [0, 1, 2, 3, 4, 5],
   showType: 0,
 });
 

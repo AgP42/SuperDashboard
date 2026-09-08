@@ -17,6 +17,8 @@ export interface Clip {
   png: string; // private-dir PNG path (the thumbnail)
   sourcePath: string; // note it came from
   sourcePage: number; // RAW firmware page (from getCurrentPageNum), round-tripped to openFile
+  sourcePageId?: string; // stable .note PAGEID of that page, so the backlink follows it across reorder/move (absent on clips captured before this, or when unreadable)
+  text?: string; // OCR text (when captured in 'ocr' mode); pasted as an editable text box. Absent = handwriting clip (image). Empty OCR falls back to the image.
   w?: number; // clip pixel size: the dashboard renders at natural size, never upscaled
   h?: number;
   labels: string[];
@@ -86,6 +88,28 @@ export async function deleteClip(id: string): Promise<void> {
   const arr = await load();
   mem = arr.filter(c => c.id !== id);
   await deleteFiles(id);
+  await persist();
+}
+
+/** Self-heal a clip's source when its page was found (by stable PAGEID) in a
+ *  different note or a new index. Keeps sourcePageId (the stable anchor). */
+export async function updateClipSource(id: string, sourcePath: string, sourcePage: number): Promise<void> {
+  const arr = await load();
+  const c = arr.find(x => x.id === id);
+  if (!c || (c.sourcePath === sourcePath && c.sourcePage === sourcePage)) return;
+  c.sourcePath = sourcePath;
+  c.sourcePage = sourcePage;
+  mem = arr;
+  await persist();
+}
+
+/** Store a clip's OCR text once recognized (background OCR after capture). */
+export async function updateClipText(id: string, text: string): Promise<void> {
+  const arr = await load();
+  const c = arr.find(x => x.id === id);
+  if (!c || c.text === text) return;
+  c.text = text;
+  mem = arr;
   await persist();
 }
 

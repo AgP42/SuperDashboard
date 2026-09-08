@@ -3,7 +3,7 @@
  * A `theme` (ledger / boxed / airy) controls the visual shell via ZoneFrame;
  * the list bodies are shared. Stars & keywords use a per-session cache.
  */
-import React, {useContext, useEffect, useMemo, useState} from 'react';
+import React, {useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {DeviceEventEmitter, Image, Modal, NativeModules, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
 
 import {BLOCK_HEIGHTS, KeywordDisplay, RECENT_MAX, ScanSettings, Theme, Zone, ZONE_ICONS} from './config';
@@ -14,9 +14,15 @@ import {scanStars, scanKeywords, flushCurrentNote, noteTitle, parentFolder, Keyw
 import {readRecent} from './recent';
 import {loadIndex, loadKeywords, loadStarredFiles, loadStats, buildIndex, runSearch, IndexData, IndexEntry, KwEntry} from './searchIndex';
 import {ClockFace} from './clock';
-import {Clip, listClips, deleteClip, setClipLabels, allClipLabels} from './clips';
+import {Clip, listClips, deleteClip, setClipLabels, allClipLabels, updateClipSource} from './clips';
+import {pasteClip} from './paste';
+import {resolveClipTarget} from './notepage';
 
 const {DashboardNative} = NativeModules;
+// Re-entrancy guard for a clip's tap-to-open (its resolve is async and may scan
+// notes): a second tap while one is in flight is ignored, so we never fire two
+// open/leave chains.
+let clipOpening = false;
 import {getStars, setStars, getKeywords, setKeywords, formatScanTime, shouldAutoScan} from './scancache';
 import {fileGlyph, ThemedButton, ui} from './ui';
 
@@ -350,11 +356,35 @@ function NavZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'nav'}>; 
 function ClipsZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type: 'clips'}>; theme: Theme; ts: TScale; nonce?: number; columns?: number}) {
   const [clips, setClips] = useState<Clip[]>([]);
   const [editing, setEditing] = useState<Clip | null>(null);
-  const reload = () => listClips().then(setClips).catch(() => {});
+  // e-ink: the newest clip's thumbnail can paint as a black smear on first
+  // render (a partial e-ink paint of the just-shown <Image>); remounting the
+  // images once, shortly after they load, forces a clean repaint — the same
+  // thing a manual collapse/re-open does by hand.
+  const [repaint, setRepaint] = useState(0);
+  // Per-clip collapse (session-only) and the in-module interactive label filter:
+  // a SET of selected labels combined with OR (empty = all; '__none__' matches
+  // clips with no label).
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
+  const [activeLabels, setActiveLabels] = useState<Set<string>>(() => new Set());
+  const repaintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reload = () =>
+    listClips()
+      .then(cs => {
+        setClips(cs);
+        // One clean image remount shortly after load (e-ink smear fix). Debounced:
+        // rapid refreshes (e.g. several background-OCR completions) coalesce into a
+        // single remount instead of stacking timeouts.
+        if (repaintTimer.current) clearTimeout(repaintTimer.current);
+        repaintTimer.current = setTimeout(() => setRepaint(r => r + 1), 450);
+      })
+      .catch(() => {});
   useEffect(() => {
     reload();
     const sub = DeviceEventEmitter.addListener('dashboard_refresh_all', reload);
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      if (repaintTimer.current) clearTimeout(repaintTimer.current);
+    };
   }, [nonce]);
 
   const folders = zone.folders ?? [];
@@ -377,13 +407,40 @@ function ClipsZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type
 
   const ff = ts.font ? {fontFamily: ts.font} : null;
   const size = zone.size ?? 'M';
-  // Grid packs multiple per row only in a single-column dashboard; with 2/3
-  // columns the block is already narrow, so clips stack. Size drives the
-  // thumbnail scale: more per row (or a narrower cell) = smaller clips. Clips
+  // "By document" sort switches to the grouped, stars-style list (a per-note
+  // header, clips stacked beneath). Grid packs multiple per row ONLY in a
+  // single-column, non-grouped dashboard; otherwise (2/3 columns, or grouped)
+  // clips stack at FULL block width, height following each clip's aspect. Clips
   // never upscale past their original pixels (maxWidth on the image).
-  const isGrid = (zone.display ?? 'grid') === 'grid' && (columns ?? 1) === 1;
+  const grouped = sort === 'note';
+  const textMode = zone.textMode ?? 'hand'; // per-block: handwriting / OCR text / both
+  const isGrid = (zone.display ?? 'grid') === 'grid' && (columns ?? 1) === 1 && !grouped;
   const perRow = isGrid ? {S: 3, M: 2, L: 1}[size] : 1;
-  const cellW: any = perRow > 1 ? `${Math.floor(100 / perRow)}%` : {S: '55%', M: '80%', L: '100%'}[size];
+  const cellW: any = perRow > 1 ? `${Math.floor(100 / perRow)}%` : '100%';
+
+  // Interactive label filter: chips for every label present in THIS module's
+  // clips (after the config filters), plus a grey "no label" chip. Tap to keep
+  // only matching clips; tap again to clear.
+  const presentLabels = [...new Set(shown.flatMap(c => c.labels))].sort((a, b) => a.localeCompare(b));
+  const hasUnlabeled = shown.some(c => c.labels.length === 0);
+  const visible =
+    activeLabels.size === 0
+      ? shown
+      : shown.filter(c => (activeLabels.has('__none__') && c.labels.length === 0) || c.labels.some(l => activeLabels.has(l)));
+  const toggleLabelFilter = (l: string) =>
+    setActiveLabels(prev => {
+      const next = new Set(prev);
+      if (next.has(l)) next.delete(l);
+      else next.add(l);
+      return next;
+    });
+  const toggleCollapse = (id: string) =>
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const del = async (id: string) => {
     const ok = await NativeUIUtils.showRattaDialog('Delete this clip?', 'Cancel', 'Delete', false).catch(() => false);
@@ -399,52 +456,154 @@ function ClipsZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type
   };
 
   return (
-    <ZoneFrame theme={theme} hs={ts.hs} font={ts.font} title={zoneTitle(zone.title, 'Clips')} meta={shown.length ? String(shown.length) : undefined}>
-      {shown.length === 0 && <Text style={ui.empty}>No clips yet: lasso a note and tap “Add to Dashboard”.</Text>}
-      <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
-        {shown.map(c => (
-          <View key={c.id} style={{width: cellW, padding: 4}}>
-            {/* Fill the cell but never upscale past the original extract (maxWidth
-                = the clip's own pixel width); height follows its aspect ratio. */}
-            <TouchableOpacity onPress={() => openFileAtPage(c.sourcePath, c.sourcePage)} activeOpacity={0.7}>
-              <Image
-                source={{uri: 'file://' + c.png}}
-                style={{
-                  width: '100%',
-                  maxWidth: c.w || 480,
-                  aspectRatio: c.w && c.h ? c.w / c.h : 1.6,
-                  borderWidth: 1,
-                  borderColor: '#000000',
-                  borderRadius: 6,
-                  backgroundColor: '#ffffff',
-                }}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
-            <View style={{flexDirection: 'row', alignItems: 'flex-start', marginTop: 3}}>
-              {/* Left group (meta · labels · 🏷). Delete ✕ is pushed to the far
-                  right by flex:1 so a label tap can't land on it by mistake. */}
-              <View style={{flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center'}}>
-                <Text style={[ui.metaMono, ff, {marginRight: 6}]} numberOfLines={1}>
-                  {noteTitle(c.sourcePath)}{c.sourcePage >= 0 ? ` · p.${c.sourcePage + 1}` : ''}
-                </Text>
-                {/* Labels are read-only here (no accidental removal); manage via 🏷. */}
-                {c.labels.map(l => (
-                  <Text key={l} style={[ui.clipChip, ff]}>{l}</Text>
-                ))}
-                <TouchableOpacity onPress={() => setEditing(c)} hitSlop={{top: 6, bottom: 6, left: 6, right: 6}}>
-                  <Text style={[ui.clipAdd, ff]}>🏷</Text>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity onPress={() => del(c.id)} hitSlop={{top: 8, bottom: 8, left: 12, right: 8}} style={{paddingLeft: 14}}>
-                <Text style={ui.clipDel}>✕</Text>
+    <ZoneFrame theme={theme} hs={ts.hs} font={ts.font} title={zoneTitle(zone.title, 'Clips')} meta={visible.length ? String(visible.length) : undefined}>
+      {shown.length === 0 && <Text style={ui.empty}>No clips yet: lasso a note and tap “Clip to Dashboard”.</Text>}
+      {shown.length > 0 && visible.length === 0 && <Text style={ui.empty}>No clips match the label filter.</Text>}
+      {(presentLabels.length > 0 || hasUnlabeled) && (
+        <View style={{flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 6}}>
+          {presentLabels.map(l => {
+            const on = activeLabels.has(l);
+            return (
+              <TouchableOpacity key={l} onPress={() => toggleLabelFilter(l)}>
+                <Text style={[on ? ui.clipChipOn : ui.clipChip, ff]}>{on ? '✓ ' : ''}{l}</Text>
               </TouchableOpacity>
-            </View>
+            );
+          })}
+          {hasUnlabeled && (
+            <TouchableOpacity onPress={() => toggleLabelFilter('__none__')}>
+              <Text style={[activeLabels.has('__none__') ? ui.clipNoLabelOn : ui.clipNoLabel, ff]}>{activeLabels.has('__none__') ? '✓ ' : ''}no label</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {grouped ? (
+        groupClipsByNote(visible).map(([file, cs]) => (
+          <View key={file}>
+            <Text style={[ui.noteHead, ts.head]}>📄 {noteTitle(file)}</Text>
+            {cs.map(c => (
+              <View key={c.id} style={{paddingVertical: 3}}>
+                <ClipCard c={c} ff={ff} textMode={textMode} repaint={repaint} collapsed={collapsedIds.has(c.id)} onToggleCollapse={() => toggleCollapse(c.id)} onEdit={setEditing} onDelete={del} />
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
+        ))
+      ) : (
+        <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
+          {visible.map(c => (
+            <View key={c.id} style={{width: cellW, padding: 4}}>
+              <ClipCard c={c} ff={ff} textMode={textMode} repaint={repaint} showNote collapsed={collapsedIds.has(c.id)} onToggleCollapse={() => toggleCollapse(c.id)} onEdit={setEditing} onDelete={del} />
+            </View>
+          ))}
+        </View>
+      )}
       {editing && <ClipLabelEditor clip={editing} font={ts.font} onSave={saveLabels} onClose={() => setEditing(null)} />}
     </ZoneFrame>
+  );
+}
+
+/** Group clips by their source note, ordered by note title (for the "by
+ *  document" sort's stars-style grouped view). */
+function groupClipsByNote(clips: Clip[]): [string, Clip[]][] {
+  const m = new Map<string, Clip[]>();
+  for (const c of clips) {
+    const arr = m.get(c.sourcePath);
+    if (arr) arr.push(c);
+    else m.set(c.sourcePath, [c]);
+  }
+  return [...m.entries()].sort((a, b) => noteTitle(a[0]).localeCompare(noteTitle(b[0])));
+}
+
+/** One clip as a self-contained CARD: a header band (tap to collapse) carrying
+ *  the source note/page + labels, and a collapsible body with the content
+ *  (handwriting and/or OCR text) and the actions (Label / Paste / delete). The
+ *  header stays visible when collapsed, so a long list reads as a compact index.
+ *  In the grouped ("by document") view the note name lives in the group header,
+ *  so `showNote` is omitted and only the page shows. */
+function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollapse, onEdit, onDelete}: {c: Clip; ff: any; textMode: 'hand' | 'ocr' | 'both'; repaint: number; showNote?: boolean; collapsed: boolean; onToggleCollapse: () => void; onEdit: (c: Clip) => void; onDelete: (id: string) => void}) {
+  // Per-block display: 'hand' = image; 'ocr' = text (image fallback when no
+  // text yet); 'both' = image + text. Paste follows the same preference.
+  const hasText = !!(c.text && c.text.trim());
+  const wantsText = textMode === 'ocr' || textMode === 'both';
+  const showText = wantsText && hasText;
+  const showImage = textMode === 'hand' || textMode === 'both' || (textMode === 'ocr' && !hasText);
+  const preferText = showText; // paste as a text box only when we're showing text
+  const openSource = async () => {
+    if (clipOpening) return; // guard: resolve is async (may scan notes) — ignore repeat taps
+    clipOpening = true;
+    try {
+      const t = await resolveClipTarget(c.sourcePath, c.sourcePageId, c.sourcePage);
+      if (t.moved) await updateClipSource(c.id, t.path, t.page).catch(() => {});
+      openFileAtPage(t.path, t.page); // leaves the plugin on success
+    } finally {
+      setTimeout(() => {
+        clipOpening = false;
+      }, 1200);
+    }
+  };
+  return (
+    <View style={ui.clipCard}>
+      {/* Header: source note/page + labels; tap toggles the body. */}
+      <TouchableOpacity style={ui.clipCardHead} activeOpacity={0.7} onPress={onToggleCollapse}>
+        <View style={{flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center'}}>
+          <Text style={[ui.metaMono, ff, {marginRight: 6}]} numberOfLines={1}>
+            {showNote ? noteTitle(c.sourcePath) + (c.sourcePage >= 0 ? ` · p.${c.sourcePage + 1}` : '') : c.sourcePage >= 0 ? `p.${c.sourcePage + 1}` : ''}
+          </Text>
+          {c.labels.map(l => (
+            <Text key={l} style={[ui.clipChip, ff]}>{l}</Text>
+          ))}
+        </View>
+        <Text style={ui.clipChevron}>{collapsed ? '▸' : '▾'}</Text>
+      </TouchableOpacity>
+
+      {!collapsed && (
+        <View style={ui.clipCardBody}>
+          {/* Content: tap → the source page (follows the clip's PAGEID across
+              reorder AND a move to another note; self-heals the stored source). */}
+          <TouchableOpacity onPress={openSource} activeOpacity={0.7}>
+            {showImage && (
+              <Image
+                key={'clipimg-' + repaint}
+                source={{uri: 'file://' + c.png}}
+                style={{width: '100%', maxWidth: c.w || 480, aspectRatio: c.w && c.h ? c.w / c.h : 1.6, borderWidth: 1, borderColor: '#000000', borderRadius: 6, backgroundColor: '#ffffff'}}
+                resizeMode="contain"
+              />
+            )}
+            {showText && (
+              <View style={[ui.clipTextBox, showImage ? {marginTop: 4} : null]}>
+                <Text style={[ui.clipText, ff]} numberOfLines={6}>
+                  {c.text}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {/* Actions: Label / Paste on the left, delete ✕ pushed to the far right. */}
+          <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 6}}>
+            <TouchableOpacity onPress={() => onEdit(c)} hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
+              <Text style={[ui.clipBtn, ff]}>🏷 Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={async () => {
+                if (clipOpening) return; // same guard as open: both end by leaving the plugin
+                clipOpening = true;
+                try {
+                  await pasteClip(c, preferText);
+                } finally {
+                  setTimeout(() => {
+                    clipOpening = false;
+                  }, 1200);
+                }
+              }}
+              hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
+              <Text style={[ui.clipBtn, ff]}>📋 Paste</Text>
+            </TouchableOpacity>
+            <View style={{flex: 1}} />
+            <TouchableOpacity onPress={() => onDelete(c.id)} hitSlop={{top: 10, bottom: 10, left: 12, right: 8}} style={{paddingLeft: 14}}>
+              <Text style={ui.clipDel}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 

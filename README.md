@@ -53,7 +53,8 @@ On the plugin‑preview firmware SuperDashboard declares two **plugin permission
   keywords**, build the **name‑search index**, read the **Recent** list, browse folders in the
   **Navigation** block, **capture Note Clips** by lasso, and load your **saved configuration**.
 - **`plugin.permission.FILE:WRITE`**: write files. Needed to **save your configuration/profiles**, to
-  **delete a star** from a note, and (only when you turn it on) to **draw the clip frame** on a note.
+  **paste a clip (image + backlink) into a note**, to **delete a star** from a note, and (only when you
+  turn it on) to **draw the clip frame** on a note.
 
 Why they're required: the Chauvet firmware enforces file access even on raw `java.io` reads of shared
 storage; without `FILE:READ` the scans and the config read fail silently. If you **decline**, the
@@ -136,16 +137,38 @@ the legacy intents on older firmware.
 
 ### Note Clips
 
-In a note, lasso anything and tap **"Add to Dashboard"** in the lasso toolbar; the snippet is captured
+In a note, lasso anything and tap **"Clip to Dashboard"** in the lasso toolbar; the snippet is captured
 silently (no view opens) and pinned as a labelled thumbnail in any **Clips** block. Tapping a clip
-jumps back to its **exact source note and page**. Label a clip with **🏷** (the editor lists your
-existing labels to reuse, plus a field for a new one). A Clips block can **filter** by source folder
-and/or label, **sort** Newest / Oldest / Label / Note, switch grid or list, and set thumbnail **size**
-S / M / L; a clip is never scaled larger than the original extract. Optionally a thin **frame**
+jumps back to its **source note and page**, and **follows that page** even if you later reorder it or
+move it to another note (the backlink resolves the note's stable page IDs and self-heals the pointer).
+**Paste** a clip into the note you have open with **📋**: a handwriting clip is inserted as an image, an
+OCR clip as an **editable text box**, each with a small **"↩ source"** link under it (move or delete it
+with the lasso, like any element). **Underline** a word with the straight-line tool while clipping and
+it becomes the clip's **label** automatically (on-device OCR, with no delay when no underline is
+present); manage labels with **🏷**.
+
+Optionally **OCR** clips to text: turn on **OCR text** in Look : Note clips (the recognition runs in the
+background right after capture, so it never slows you down), then each Clips block chooses how to show
+its clips: **handwriting**, **OCR text**, or **both** (text falls back to the image when OCR finds
+nothing). An OCR'd clip pastes as an editable text box; its **font** (your MyStyle fonts) and **size**
+are configurable.
+
+Each clip is a **card** (a header with its source note / page + labels, tap to collapse; tap the content
+to open the source). A Clips block can **filter** by source folder and/or label, **sort** Newest /
+Oldest / Label / Note (**by Note** groups clips under a per-note header), switch grid or list, and set
+thumbnail **size** S / M / L (clips fill the full width in 2 or 3 column dashboards); a clip is never
+scaled larger than the original extract. The block header also has a live **label filter**: tap the
+label chips (they combine with **OR**), plus a grey **no label** chip. Optionally a thin **frame**
 (off / grey / black, set in Look) is drawn on the note around what you captured, as a permanent mark
 (removing the clip does not erase it). Notes only (PDF lasso isn't supported); up to 200 clips.
 
 ![Note lassoed for a clip](docs/img/note-clip-source.png)
+
+![Clips on the dashboard: cards, labels, handwriting + OCR text, label filter](docs/img/clips-dashboard.png)
+
+![An OCR clip pasted back into a note as an editable text box, with its source backlink](docs/img/clip-paste.png)
+
+![A Clips block's settings (display, size, sort, filters)](docs/img/clips-config.png)
 
 ### Clock
 

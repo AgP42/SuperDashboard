@@ -349,6 +349,49 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
         }
     }
 
+    /** Read a byte range of a file, returning {success, fileSize, latin1}.
+     *  latin1 is the raw bytes as an ISO-8859-1 string (1 char == 1 byte), so
+     *  JS can read little-endian length prefixes via charCodeAt and match text
+     *  markers with a regex — no base64 decoder needed on the JS side. `length`
+     *  <= 0 returns just the size (a stat). Used to parse .note page IDs. */
+    @ReactMethod
+    public void readFileRange(String path, double offset, double length, Promise promise) {
+        java.io.RandomAccessFile raf = null;
+        try {
+            File f = new File(path);
+            if (!f.exists()) {
+                WritableMap m = Arguments.createMap();
+                m.putBoolean("success", false);
+                promise.resolve(m);
+                return;
+            }
+            raf = new java.io.RandomAccessFile(f, "r");
+            long size = raf.length();
+            WritableMap m = Arguments.createMap();
+            m.putBoolean("success", true);
+            m.putDouble("fileSize", (double) size);
+            long off = (long) offset;
+            int len = (int) length;
+            if (len > 0 && off >= 0 && off < size) {
+                int toRead = (int) Math.min((long) len, size - off);
+                byte[] buf = new byte[toRead];
+                raf.seek(off);
+                raf.readFully(buf);
+                m.putString("latin1", new String(buf, "ISO-8859-1"));
+            }
+            promise.resolve(m);
+        } catch (Exception e) {
+            promise.reject("RANGE_READ_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        } finally {
+            if (raf != null) {
+                try {
+                    raf.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
     @ReactMethod
     public void appendLog(String text, Promise promise) {
         try {

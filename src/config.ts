@@ -102,9 +102,17 @@ export const ZONE_LABELS: Record<string, string> = {
 
 /** Clip ordering in a Clips block. */
 export type ClipSort = 'new' | 'old' | 'label' | 'note';
+/** How a Clips block shows each clip: handwriting image, OCR text, or both.
+ *  'ocr'/'both' need OCR enabled globally (Look → Note clips) so clips carry
+ *  text; 'ocr' with no text falls back to the image. */
+export type ClipTextMode = 'hand' | 'ocr' | 'both';
 
 /** Optional grey/black rectangle drawn on the note around a captured clip. */
 export type ClipFrame = 'off' | 'grey' | 'black';
+/** How a captured clip is stored/pasted: keep the handwriting (image) or OCR it
+ *  to text (pasted as an editable text box). OCR falls back to the image when it
+ *  yields nothing, same as the Stars 'text' mode. */
+export type ClipText = 'hand' | 'ocr';
 
 export type Zone = ZoneCommon &
   (
@@ -126,7 +134,7 @@ export type Zone = ZoneCommon &
     | {type: 'search'; title?: string; folders?: string[]}
     | {type: 'status'; title?: string; battery?: boolean; storage?: boolean; stats?: boolean}
     | {type: 'nav'; title?: string; root?: string}
-    | {type: 'clips'; title?: string; folders?: string[]; labels?: string[]; display?: 'grid' | 'list'; sort?: ClipSort; size?: 'S' | 'M' | 'L'}
+    | {type: 'clips'; title?: string; folders?: string[]; labels?: string[]; display?: 'grid' | 'list'; sort?: ClipSort; size?: 'S' | 'M' | 'L'; textMode?: ClipTextMode}
     | {type: 'spacer'; title?: string}
   );
 
@@ -175,6 +183,12 @@ export interface DashboardConfig {
   showIcons?: boolean;
   /** Rectangle drawn on the note around a lassoed clip (off by default). */
   clipFrame?: ClipFrame;
+  /** Capture clips as handwriting (image, default) or OCR them to text. */
+  clipText?: ClipText;
+  /** Font size (px) for an OCR'd clip pasted as a text box. */
+  clipFontSize?: number;
+  /** MyStyle/fonts .ttf/.otf path for an OCR'd clip pasted as a text box; '' / undefined = the note's default font. */
+  clipFontPath?: string;
   zones: Zone[];
 }
 
@@ -298,7 +312,11 @@ function normalize(raw: any): DashboardConfig {
   const font: string | undefined = typeof raw?.font === 'string' && raw.font ? raw.font : undefined;
   const showIcons = raw?.showIcons === true;
   const clipFrame: ClipFrame = ['off', 'grey', 'black'].includes(raw?.clipFrame) ? raw.clipFrame : 'off';
-  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, clipFrame, zones};
+  const clipText: ClipText = raw?.clipText === 'ocr' ? 'ocr' : 'hand';
+  const clipFontSize: number =
+    typeof raw?.clipFontSize === 'number' && raw.clipFontSize >= 12 && raw.clipFontSize <= 96 ? raw.clipFontSize : 36;
+  const clipFontPath: string | undefined = typeof raw?.clipFontPath === 'string' && raw.clipFontPath ? raw.clipFontPath : undefined;
+  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, clipFrame, clipText, clipFontSize, clipFontPath, zones};
 }
 
 function isZone(z: any): z is Zone {
@@ -349,6 +367,7 @@ function normalizeZone(z: any): Zone {
         labels: arr(z.labels),
         sort: ['new', 'old', 'label', 'note'].includes(z.sort) ? z.sort : 'new',
         size: ['S', 'M', 'L'].includes(z.size) ? z.size : 'M',
+        textMode: ['hand', 'ocr', 'both'].includes(z.textMode) ? z.textMode : 'hand',
       };
     case 'spacer':
       return {...z}; // empty block; height comes from `h` (set in normalize)
