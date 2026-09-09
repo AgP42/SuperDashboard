@@ -186,8 +186,9 @@ optionally show what's written **on the star's line** (the block's **🔧** → 
 
 - **Off**: just `p.N`.
 - **Image**: the actual **handwriting** of the line (always legible).
-- **Text**: **OCR** to text where the recognizer can read it, and it **falls back to the handwriting
-  image** for any line it can't. Best of both.
+- **Text**: shows the line as text. **Typewritten** lines (text you typed or converted) are read
+  **directly**, so they are always exact. **Handwritten** lines are **OCR'd** where the recognizer can
+  read them, and it **falls back to the handwriting image** for any line it can't. Best of both.
 
 Turn on **Allow deleting** to get a **✕★** next to each star; it removes **just that five-star** (your
 handwriting is kept), after a confirmation.

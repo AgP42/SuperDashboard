@@ -119,7 +119,8 @@ title (▾/▸), and the block's type icon can be shown or hidden on the title.
   outside the permission sandbox, so Recent falls back to the recently‑**modified** notes/documents
   under `/Note` + `/Document` (newest first, cached).
 - **Stars**: five‑star pages from the scan, grouped by note; optional per‑star **line preview**
-  (handwriting image, or OCR text with image fallback); delete a single star (`✕★`).
+  (handwriting image, or text: typewritten lines read directly, handwriting OCR'd, image fallback);
+  delete a single star (`✕★`).
 - **Keywords**: keyword occurrences as tappable chips; each opens its note **on the right page**.
 - **Clock**: time + date + week number + extra time zones, in a choice of faces (see below).
 - **Device**: battery, free storage (internal + SD card) and a stats line (notes / pdf / stars /

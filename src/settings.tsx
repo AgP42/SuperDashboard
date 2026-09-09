@@ -6,7 +6,7 @@
  * The header has Reset all + Save/load config; a ✕ closes the plugin. No JSON
  * editor here; advanced users edit MyStyle/Plugins/Dashboard/config.json directly.
  */
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Image, NativeModules, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
 
 const KOFI_QR = require('../assets/kofi-qr.png');
@@ -816,13 +816,32 @@ const Mini = ({label, onPress, big}: {label: string; onPress: () => void; big?: 
  * Inline title editor. ✎ turns the title into a field; committing happens on the
  * keyboard's Done key OR when the field loses focus; NOT via a button (on the
  * Supernote the on-screen keyboard covers an inline button, which looked frozen).
+ * It ALSO auto-saves (debounced) on every change: handwriting a name and letting
+ * the Supernote convert it to text does not always fire Done or a clean blur, so
+ * without this the converted name would silently be lost.
  */
 function EditableTitle({value, onSave}: {value: string; onSave: (t: string) => void}) {
   const [editing, setEditing] = useState(false);
   const [t, setT] = useState(value);
   useEffect(() => setT(value), [value]);
 
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTimer = () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+  };
+  useEffect(() => clearTimer, []); // clear on unmount
+
+  const onChange = (next: string) => {
+    setT(next);
+    clearTimer();
+    saveTimer.current = setTimeout(() => onSave(next.trim()), 700); // keep editing open; just persist
+  };
+
   const commit = () => {
+    clearTimer();
     onSave(t.trim());
     setEditing(false);
   };
@@ -840,11 +859,11 @@ function EditableTitle({value, onSave}: {value: string; onSave: (t: string) => v
   }
   return (
     <View style={{marginTop: 2, marginBottom: 4}}>
-      <Text style={ui.subLabel}>Title (press Done or tap away to save)</Text>
+      <Text style={ui.subLabel}>Title (saves as you type; Done or tap away also saves)</Text>
       <TextInput
         style={ui.titleInput}
         value={t}
-        onChangeText={setT}
+        onChangeText={onChange}
         autoFocus
         autoCapitalize="none"
         autoCorrect={false}

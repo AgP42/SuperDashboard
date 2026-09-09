@@ -46,6 +46,13 @@ interface StarLine {
   top: number; // line's top in the EMR row axis
   bot: number; // line's bottom
   boxes: Box[]; // stroke boxes on this line
+  typedText?: string; // when the line is a typewritten text box: its text, read directly (no OCR)
+}
+/** A typewritten text box, positioned as a fraction of the page height. */
+interface TBox {
+  topF: number;
+  botF: number;
+  text: string;
 }
 interface StarGeom {
   size: any;
@@ -109,6 +116,22 @@ async function readStarGeom(path: string, page0: number): Promise<StarGeom | nul
   const heights = boxed.map(b => b.x1 - b.x0).sort((a, b) => a - b);
   const medianH = heights.length ? heights[Math.floor(heights.length / 2)] : 0;
 
+  // Typewritten text boxes (type 500/501/502): their text is stored, so we read
+  // it DIRECTLY instead of OCR'ing. textRect is pixel coords, so we express each
+  // box as a fraction of the page height to match the star's EMR row position.
+  const pageH = size?.height || 0;
+  const tboxes: TBox[] = [];
+  if (pageH > 0) {
+    for (const e of els) {
+      if (e.type !== 500 && e.type !== 501 && e.type !== 502) continue;
+      const r = e.textBox?.textRect;
+      const txt = (e.textBox?.textContentFull ?? '').replace(/\s+/g, ' ').trim();
+      if (!r || !txt) continue;
+      tboxes.push({topF: r.top / pageH, botF: r.bottom / pageH, text: txt});
+    }
+    tboxes.sort((a, b) => a.topF - b.topF);
+  }
+
   const stars: StarLine[] = starEls
     .map(e => {
       const pts: any[] = e.fiveStar?.points ?? [];
@@ -130,7 +153,22 @@ async function readStarGeom(path: string, page0: number): Promise<StarGeom | nul
         if (b.x0 < top) top = b.x0;
         if (b.x1 > bot) bot = b.x1;
       }
-      return {num: st.num, top, bot, boxes};
+      // A typewritten line has no strokes: match the star's row (as a fraction of
+      // the page) to a text box's vertical span and read its text directly. Also
+      // widen the crop to that box so image mode frames the whole line, not just
+      // the star glyph.
+      let typedText: string | undefined;
+      if (maxX > 0 && tboxes.length) {
+        const starF = starRow / maxX;
+        const padF = Math.max(band / maxX * 0.5, 0.005);
+        const hit = tboxes.find(t => starF >= t.topF - padF && starF <= t.botF + padF);
+        if (hit) {
+          typedText = hit.text;
+          top = Math.min(top, hit.topF * maxX);
+          bot = Math.max(bot, hit.botF * maxX);
+        }
+      }
+      return {num: st.num, top, bot, boxes, typedText};
     });
 
   return {size, els, maxX, aspect, stars};
@@ -171,13 +209,17 @@ export async function starLineImages(path: string, page0: number, mtime: number)
   }
 }
 
-/** OCR text per star's line (top→bottom); '' where the recognizer fails. */
+/** Text per star's line (top→bottom). Typewritten lines are read directly from
+ *  the text box (reliable); handwritten lines are OCR'd; '' where OCR fails. */
 export async function starLineTexts(path: string, page0: number): Promise<string[]> {
   const g = await readStarGeom(path, page0);
   if (!g) return [];
   try {
     const out: string[] = [];
-    for (const st of g.stars) out.push(st.boxes.length ? await recognize(st.boxes.map(b => b.s), g.size) : '');
+    for (const st of g.stars) {
+      if (st.typedText) out.push(st.typedText);
+      else out.push(st.boxes.length ? await recognize(st.boxes.map(b => b.s), g.size) : '');
+    }
     return out;
   } finally {
     await recycleGeom(g);
