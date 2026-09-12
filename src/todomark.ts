@@ -14,7 +14,7 @@
  * that the box is reliably found and that hand-drawn ink inside it is detectable.
  */
 import {NativeModules} from 'react-native';
-import {PluginCommAPI, PluginFileAPI, PointUtils} from 'sn-plugin-lib';
+import {PluginCommAPI, PluginFileAPI} from 'sn-plugin-lib';
 
 import {Clip} from './clips';
 import {resolveClipTarget} from './notepage';
@@ -51,45 +51,6 @@ function boxOfPoints(points: any[]): Box | null {
 
 const centre = (b: Box) => ({x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2});
 
-/**
- * Fraction of a stroke's sampled points landing inside `box`.
- *
- * CAREFUL with spaces: stroke points are EMR (hardware pen units, and rotated 90°
- * versus the screen), while the box comes from geometry/text rects, which are
- * page PIXELS. A first device run compared the two directly and unsurprisingly
- * found nothing inside anything; every point is converted first.
- */
-async function strokeCoverage(el: any, box: Box, pageSize: any, sample?: (raw: any, px: any) => void): Promise<number> {
-  try {
-    const acc = el.stroke?.points;
-    if (!acc) return 0;
-    const n = await acc.size();
-    if (!n) return 0;
-    const pts: any[] = await acc.getRange(0, Math.min(n, 200));
-    let inside = 0;
-    let counted = 0;
-    for (const p of pts) {
-      if (!p || typeof p.x !== 'number') continue;
-      let q: any = p;
-      try {
-        q = PointUtils.emrPoint2Android({x: p.x, y: p.y}, pageSize);
-      } catch {
-        /* fall back to the raw point rather than dropping the stroke */
-      }
-      if (counted === 0) sample?.(p, q);
-      counted++;
-      if (q.x >= box.x1 && q.x <= box.x2 && q.y >= box.y1 && q.y <= box.y2) inside++;
-    }
-    return counted ? inside / counted : 0;
-  } catch {
-    return 0;
-  }
-}
-
-/** Locate a to-do's tick-box on its source note: find the "#N" label by its
- *  text (the durable handle — uuids are not), then the ~44px square nearest it.
- *  Returns the page and the box in page pixels, or null. Caller must have let
- *  getElements' results be recycled (this recycles its own read). */
 /** Find the "#N" mark and its box on ONE specific page. null if not there. */
 async function findMarkOnPage(path: string, page: number, markNum: number): Promise<Box | null> {
   const els: any[] = unwrap<any[]>(await PluginFileAPI.getElements(page, path)) ?? [];
@@ -295,72 +256,5 @@ async function insertGeoLine(path: string, page: number, x1: number, y1: number,
   } catch (e: any) {
     mlog(`insertGeoLine threw: ${e && e.message}`);
     return false;
-  }
-}
-
-export async function probeTodoMark(clip: Clip): Promise<void> {
-  try {
-    if (typeof clip.markNum !== 'number') {
-      mlog(`${clip.id}: no mark number (captured without a frame, or before this build)`);
-      return;
-    }
-    const tag = `#${clip.markNum}`;
-    const t = await resolveClipTarget(clip.sourcePath, clip.sourcePageId, clip.sourcePage);
-    const els: any[] = unwrap<any[]>(await PluginFileAPI.getElements(t.page, t.path)) ?? [];
-    try {
-      // 1. The label is the handle: find the text box whose text IS our tag.
-      const labels = els.filter(e => e && (e.type === 500 || e.type === 501 || e.type === 502) && e.textBox);
-      const label = labels.find(e => (e.textBox.textContentFull ?? '').trim() === tag);
-      mlog(`${clip.id}: page=${t.page} els=${els.length} textboxes=${labels.length} looking for "${tag}" found=${!!label}`);
-      if (!label) {
-        mlog(`${clip.id}: texts on page = ${labels.map(e => JSON.stringify((e.textBox.textContentFull ?? '').slice(0, 12))).join(',') || 'none'}`);
-        return;
-      }
-      const lr = label.textBox.textRect;
-      mlog(`${clip.id}: label at [${Math.round(lr.left)},${Math.round(lr.top)},${Math.round(lr.right)},${Math.round(lr.bottom)}]`);
-
-      // 2. The tick-box is the square immediately LEFT of the label. Match on the
-      //    size we always draw, then take the nearest one to the label.
-      const anchor = {x: lr.left, y: (lr.top + lr.bottom) / 2};
-      const cands = els
-        .filter(e => e && e.type === 700)
-        .map(g => ({g, b: boxOfPoints(g.geometry?.points)}))
-        .filter(c => c.b && Math.abs(c.b.x2 - c.b.x1 - BOX_SIDE) <= SIDE_TOL && Math.abs(c.b.y2 - c.b.y1 - BOX_SIDE) <= SIDE_TOL) as {g: any; b: Box}[];
-      if (!cands.length) {
-        mlog(`${clip.id}: label found but NO ~${BOX_SIDE}px square near it`);
-        return;
-      }
-      cands.sort((a, b) => {
-        const ca = centre(a.b);
-        const cb = centre(b.b);
-        return Math.hypot(ca.x - anchor.x, ca.y - anchor.y) - Math.hypot(cb.x - anchor.x, cb.y - anchor.y);
-      });
-      const box = cands[0].b;
-      const was = clip.boxRect ? centre({x1: clip.boxRect.left, y1: clip.boxRect.top, x2: clip.boxRect.right, y2: clip.boxRect.bottom}) : null;
-      const moved = was ? Math.round(Math.hypot(centre(box).x - was.x, centre(box).y - was.y)) : -1;
-      mlog(`${clip.id}: box at [${Math.round(box.x1)},${Math.round(box.y1)},${Math.round(box.x2)},${Math.round(box.y2)}]${moved >= 0 ? `, moved ${moved}px` : ''}`);
-
-      // 3. Ink inside the box = ticked by hand.
-      const pageSize = unwrap<any>(await PluginFileAPI.getPageSize(t.path, t.page)) ?? unwrap<any>(await PluginCommAPI.getPageDisplaySize());
-      let best = 0;
-      let touching = 0;
-      let logged = false;
-      for (const e of els) {
-        if (!e || e.type !== 0) continue;
-        const f = await strokeCoverage(e, box, pageSize, (raw, px) => {
-          if (logged) return;
-          logged = true;
-          // One raw/converted pair, so a wrong space is obvious in the log.
-          mlog(`${clip.id}: pageSize=${pageSize?.width}x${pageSize?.height} stroke pt raw=(${Math.round(raw.x)},${Math.round(raw.y)}) → px=(${Math.round(px.x)},${Math.round(px.y)})`);
-        });
-        if (f > 0) touching++;
-        if (f > best) best = f;
-      }
-      mlog(`${clip.id}: strokes inside the box: ${touching}, best coverage ${(best * 100).toFixed(0)}% → ticked-on-paper would read ${touching > 0 && best > 0.5 ? 'TRUE' : 'false'}`);
-    } finally {
-      await recycleAll(els);
-    }
-  } catch (e: any) {
-    mlog(`${clip.id}: probe failed: ${e && e.message}`);
   }
 }

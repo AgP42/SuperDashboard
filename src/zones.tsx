@@ -648,7 +648,6 @@ function TodoZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type:
 
   const toggleDone = async (c: Clip) => {
     const next = !c.done;
-    DashboardNative?.appendLog?.(`[mark] toggle ${c.id} ${c.done}→${next}`).catch(() => {}); // TEMP: which branch runs
     await setClipDone(c.id, next);
     // Direction 1: mirror the tick on the source note — draw the check when
     // ticking here, erase it when un-ticking. Only a to-do that HAS a mark on the
