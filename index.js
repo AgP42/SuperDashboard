@@ -8,12 +8,12 @@ import {AppRegistry, AppState, DeviceEventEmitter, Image, NativeModules, ToastAn
 import App from './App';
 import {name as appName} from './app.json';
 
-import {PluginManager, PluginCommAPI} from 'sn-plugin-lib';
+import {PluginManager, PluginCommAPI, PluginNoteAPI} from 'sn-plugin-lib';
 import {setRoute} from './src/route';
 import {showBubbleFromConfig} from './src/bubble';
 import {hasSavedConfig, loadConfig} from './src/config';
 import {ensureFilePermissions} from './src/permissions';
-import {addClip, clipId, updateClipText} from './src/clips';
+import {addClip, clipId, nextMarkNum, updateClipText} from './src/clips';
 import {detectUnderlineLabels} from './src/underline';
 import {pageIdAt} from './src/notepage';
 import {cacheDir} from './src/paths';
@@ -144,10 +144,14 @@ PluginManager.registerPluginLifeListener({
 
 const TOOLBAR_BTN = 100;
 const LASSO_BTN = 200;
+const LASSO_TODO_BTN = 201;
 
 // ---- Note Clips: lasso → "Add to Dashboard" (headless capture) ------------
 // Native pen colours for the optional capture frame (dark grey / black).
 const FRAME_PEN = {black: 0x00, grey: 0x9d};
+// Side (page pixels) of the tick-box drawn beside a to-do's frame. Constant on
+// purpose: it is how the box is recognised on the page later.
+const TODO_BOX_SIDE = 44;
 
 /** Unwrap the SDK APIResponse shape. */
 function unwrapR(r) {
@@ -163,32 +167,90 @@ function capSize(sz, max) {
 }
 
 /** Draw a thin rectangle on the note around the captured area (a single geometry). */
-async function drawClipFrame(rect, style) {
+async function drawGeoBox(penColor, left, top, right, bottom, penWidth = 200) {
+  await PluginCommAPI.insertGeometry({
+    penColor,
+    penType: 10, // fineliner
+    penWidth, // schema minimum is 100
+    type: 'GEO_polygon',
+    points: [
+      {x: left, y: top},
+      {x: right, y: top},
+      {x: right, y: bottom},
+      {x: left, y: bottom},
+      {x: left, y: top},
+    ],
+    showLassoAfterInsert: false,
+  });
+}
+
+async function drawGeoLine(penColor, x1, y1, x2, y2, penWidth) {
+  await PluginCommAPI.insertGeometry({
+    penColor,
+    penType: 10,
+    penWidth,
+    type: 'straightLine',
+    points: [{x: x1, y: y1}, {x: x2, y: y2}],
+    showLassoAfterInsert: false,
+  });
+}
+
+/**
+ * Mark the captured area on the note: a rectangle for a clip, and for a to-do the
+ * same rectangle plus a small empty TICK-BOX straddling its top-left corner, so
+ * the two kinds are distinguishable on paper.
+ *
+ * Returns the uuid of the last geometry inserted (read straight back), which is a
+ * stable handle on the mark even after the user moves it — position is not.
+ */
+async function drawClipFrame(rect, style, kind, markNum) {
   const penColor = FRAME_PEN[style];
-  if (penColor == null || !rect) return;
+  if (penColor == null || !rect) return null;
   try {
-    await PluginCommAPI.insertGeometry({
-      penColor,
-      penType: 10, // fineliner
-      penWidth: 200, // schema minimum is 100
-      type: 'GEO_polygon',
-      points: [
-        {x: rect.left, y: rect.top},
-        {x: rect.right, y: rect.top},
-        {x: rect.right, y: rect.bottom},
-        {x: rect.left, y: rect.bottom},
-        {x: rect.left, y: rect.top},
-      ],
-      showLassoAfterInsert: false,
-    });
+    await drawGeoBox(penColor, rect.left, rect.top, rect.right, rect.bottom);
+    if (kind !== 'todo') return null;
+    // The tick-box: a fixed-size square straddling the frame's top-left corner,
+    // with a heavier right and bottom edge so it reads as a raised button. The
+    // shadow is not decoration: it makes the symbol one you would not draw by
+    // hand by accident, so a hand-drawn square is never mistaken for this.
+    const side = TODO_BOX_SIDE;
+    const box = {left: rect.left - side / 2, top: rect.top - side / 2, right: rect.left + side / 2, bottom: rect.top + side / 2};
+    await drawGeoBox(penColor, box.left, box.top, box.right, box.bottom);
+    const off = 4;
+    await drawGeoLine(penColor, box.right + off, box.top + off, box.right + off, box.bottom + off, 600);
+    await drawGeoLine(penColor, box.left + off, box.bottom + off, box.right + off, box.bottom + off, 600);
+    // "#N" printed just right of the box, sitting on the frame's top edge. This
+    // is the durable handle: element uuids are regenerated on every read, but a
+    // text box can be found again by its own text, wherever it ends up.
+    if (typeof markNum === 'number') {
+      const fs = 28;
+      const h = Math.round(fs * (5 / 3));
+      const left = box.right + 10;
+      const top = Math.round(rect.top - h / 2);
+      try {
+        await PluginNoteAPI.insertText({
+          textContentFull: `#${markNum}`,
+          textRect: {left, top, right: left + 110, bottom: top + h},
+          fontSize: fs,
+          textAlign: 0,
+          textFrameWidthType: 0,
+          textFrameStyle: 0,
+          textEditable: 0,
+        });
+      } catch (e) {
+        blog(`[clip] mark label failed: ${e && e.message}`);
+      }
+    }
+    return box;
   } catch (e) {
     blog(`[clip] drawFrame failed: ${e && e.message}`);
+    return null;
   }
 }
 
 /** Save the current lasso selection as an image clip, backlinked to its page.
  *  Headless: no plugin view is opened (frictionless collection). */
-async function handleLassoToClip() {
+async function handleLassoToClip(kind) {
   // `els` (the captured strokes) are kept alive for the underline-label OCR and
   // the OPTIONAL background OCR, then freed EXACTLY ONCE on every exit path via
   // recycleEls() (recognizeElements is element-based, so it still works on them
@@ -223,7 +285,6 @@ async function handleLassoToClip() {
       ToastAndroid.show('Nothing selected', ToastAndroid.SHORT);
       return;
     }
-
     // Load config once (clip content mode + frame) and the page size (reused by
     // the OCR pass and the underline-label detector).
     let cfg = null;
@@ -296,7 +357,8 @@ async function handleLassoToClip() {
       await DashboardNative?.pruneMatching?.(dir, `clip_${id}.sticker`, '');
     } catch {}
 
-    if (frame !== 'off' && rect) await drawClipFrame(rect, frame);
+    const markNum = kind === 'todo' && frame !== 'off' && rect ? await nextMarkNum() : undefined;
+    const boxRect = frame !== 'off' && rect ? await drawClipFrame(rect, frame, kind, markNum) : null;
     try {
       await PluginCommAPI.setLassoBoxState(2); // dismiss the lasso (keeps the handwriting)
     } catch (e) {
@@ -307,8 +369,22 @@ async function handleLassoToClip() {
     // size (never upscaled larger than the original extract). Added WITHOUT text
     // first, so the clip appears immediately and the user has control back; the
     // optional OCR (below) fills the text in a moment later.
-    await addClip({id, png: pngPath, sourcePath: path, sourcePage: page, sourcePageId: sourcePageId || undefined, w: size.width, h: size.height, labels: autoLabels, createdAt: Date.now()});
-    blog(`[clip] added ${id} from ${path} p.${page}${autoLabels.length ? ` labels="${autoLabels.join(', ')}"` : ''}`);
+    await addClip({
+      id,
+      png: pngPath,
+      sourcePath: path,
+      sourcePage: page,
+      sourcePageId: sourcePageId || undefined,
+      w: size.width,
+      h: size.height,
+      labels: autoLabels,
+      kind,
+      ...(kind === 'todo' ? {done: false} : {}),
+      ...(boxRect ? {boxRect} : {}),
+      ...(typeof markNum === 'number' ? {markNum} : {}),
+      createdAt: Date.now(),
+    });
+    blog(`[clip] added ${kind} ${id} from ${path} p.${page}${autoLabels.length ? ` labels="${autoLabels.join(', ')}"` : ''}`);
     ToastAndroid.show(autoLabels.length ? `✓ Added · ${autoLabels.join(', ')}` : '✓ Added to Dashboard', ToastAndroid.SHORT);
 
     // Background OCR (opt-in): control is already back with the user (toast
@@ -359,7 +435,7 @@ PluginManager.registerButton(1, ['NOTE', 'DOC'], {
 // = headless: we capture in onButtonPress without opening the plugin view.
 PluginManager.registerButton(2, ['NOTE'], {
   id: LASSO_BTN,
-  name: 'Clip to Dashboard',
+  name: 'Dashboard Clip',
   icon: Image.resolveAssetSource(require('./assets/icon.png')).uri,
   // Lasso data types that KEEP this button enabled: 0=stroke, 1=title,
   // 2=picture, 3=text, 4=link, 5=geometry. The firmware greys the button out if
@@ -370,12 +446,21 @@ PluginManager.registerButton(2, ['NOTE'], {
   showType: 0,
 });
 
+// Same capture, filed as a task instead of a reference.
+PluginManager.registerButton(2, ['NOTE'], {
+  id: LASSO_TODO_BTN,
+  name: 'Dashboard To-do',
+  icon: Image.resolveAssetSource(require('./assets/icon.png')).uri,
+  editDataTypes: [0, 1, 2, 3, 4, 5],
+  showType: 0,
+});
+
 PluginManager.registerButtonListener({
   // Lasso button → capture a clip headlessly. Toolbar button → Dashboard (or the
   // Settings wizard on first open, where no config was ever saved).
   onButtonPress(e) {
-    if (e && e.id === LASSO_BTN) {
-      handleLassoToClip();
+    if (e && (e.id === LASSO_BTN || e.id === LASSO_TODO_BTN)) {
+      handleLassoToClip(e.id === LASSO_TODO_BTN ? 'todo' : 'clip');
       return;
     }
     blog('[btn] toolbar pressed');

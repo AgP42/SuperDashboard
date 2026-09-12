@@ -4,19 +4,21 @@
  * the list bodies are shared. Stars & keywords use a per-session cache.
  */
 import React, {useContext, useEffect, useMemo, useRef, useState} from 'react';
-import {DeviceEventEmitter, Image, Modal, NativeModules, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
+import {DeviceEventEmitter, Image, Modal, NativeModules, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View} from 'react-native';
 
-import {BLOCK_HEIGHTS, KeywordDisplay, RECENT_MAX, ScanSettings, Theme, Zone, ZONE_ICONS} from './config';
+import {BLOCK_HEIGHTS, KeywordDisplay, RECENT_DEFAULT, ScanSettings, Theme, Zone, ZONE_ICONS} from './config';
 import {openFile, openFileAtPage, openFolder, launchApp} from './open';
-import {deleteStarByIndex, LineImg} from './starText';
-import {NativeUIUtils} from 'sn-plugin-lib';
-import {scanStars, scanKeywords, flushCurrentNote, noteTitle, parentFolder, KeywordHit} from './scanner';
+import {deleteStarByIndex, LineImg, unwrap} from './starText';
+import {NativeUIUtils, PluginCommAPI} from 'sn-plugin-lib';
+import {readNoteToc, TocEntry} from './notetoc';
+import {scanStars, scanKeywords, flushCurrentNote, noteTitle, parentFolder, recentModifiedFiles, KeywordHit} from './scanner';
 import {readRecent} from './recent';
-import {loadIndex, loadKeywords, loadStarredFiles, loadStats, buildIndex, runSearch, IndexData, IndexEntry, KwEntry} from './searchIndex';
+import {loadIndex, loadKeywords, loadTitles, loadStarredFiles, loadStats, buildIndex, runSearch, IndexData, IndexEntry, KwEntry, TitleHit} from './searchIndex';
 import {ClockFace} from './clock';
-import {Clip, listClips, deleteClip, setClipLabels, allClipLabels, updateClipSource} from './clips';
+import {Clip, listClips, deleteClip, setClipDone, setClipKind, reanchorClip, setClipLabels, allClipLabels, updateClipSource} from './clips';
 import {pasteClip} from './paste';
-import {resolveClipTarget} from './notepage';
+import {resolveClipTarget, pageIdAt} from './notepage';
+import {writeTodoCheck, clearTodoCheck, deepFindMark, drawCheckInBox, eraseCheckInBox} from './todomark';
 
 const {DashboardNative} = NativeModules;
 // Re-entrancy guard for a clip's tap-to-open (its resolve is async and may scan
@@ -104,6 +106,10 @@ export function ZoneView({
         return <NavZone zone={zone} theme={theme} ts={ts} nonce={nonce} />;
       case 'clips':
         return <ClipsZone zone={zone} theme={theme} ts={ts} nonce={nonce} columns={columns} />;
+      case 'todo':
+        return <TodoZone zone={zone} theme={theme} ts={ts} nonce={nonce} columns={columns} />;
+      case 'toc':
+        return <TocZone zone={zone} theme={theme} ts={ts} nonce={nonce} />;
       case 'spacer':
         return <View style={{height: BLOCK_HEIGHTS[zone.h ?? 'M']}} />;
     }
@@ -125,27 +131,32 @@ function SearchZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'searc
   const [q, setQ] = useState('');
   const [idx, setIdx] = useState<IndexData | null>(null);
   const [kws, setKws] = useState<KwEntry[]>([]);
+  const [tts, setTts] = useState<TitleHit[]>([]);
   const [starred, setStarred] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
+  const withTitles = !!zone.searchTitles;
 
   useEffect(() => {
     // Load the persisted snapshot (instant); loadIndex refreshes in the background.
     loadIndex().then(setIdx).catch(() => {});
     loadKeywords().then(setKws).catch(() => {});
     loadStarredFiles().then(setStarred).catch(() => {});
-  }, [nonce]);
+    if (withTitles) loadTitles().then(setTts).catch(() => {});
+  }, [nonce, withTitles]);
 
   const roots = zone.folders;
   const rootsKey = (roots ?? []).join('|');
-  const res = useMemo(() => runSearch(idx, kws, q, {roots, starred}), [idx, kws, q, rootsKey, starred]); // eslint-disable-line react-hooks/exhaustive-deps
-  const total = res.folders.length + res.notes.length + res.pdfs.length + res.docs.length + res.keywords.length;
+  const res = useMemo(() => runSearch(idx, kws, q, {roots, starred, titles: withTitles ? tts : []}), [idx, kws, q, rootsKey, starred, tts, withTitles]); // eslint-disable-line react-hooks/exhaustive-deps
+  const total = res.folders.length + res.notes.length + res.pdfs.length + res.docs.length + res.keywords.length + res.titles.length;
 
   const rebuild = async () => {
     setBusy(true);
     try {
-      setIdx(await buildIndex());
-      setKws(await loadKeywords());
-      setStarred(await loadStarredFiles());
+      const [i, k, st, t] = await Promise.all([buildIndex(), loadKeywords(), loadStarredFiles(), withTitles ? loadTitles() : Promise.resolve([])]);
+      setIdx(i);
+      setKws(k);
+      setStarred(st);
+      setTts(t);
     } catch {
       /* ignore */
     }
@@ -177,7 +188,7 @@ function SearchZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'searc
       </View>
 
       <Text style={[ui.metaMono, {marginBottom: 6}]}>
-        {roots && roots.length ? `scope: ${roots.length} folder${roots.length > 1 ? 's' : ''} · ` : ''}"phrase" =exact a|b !x f: kw: star: type: approx:
+        {roots && roots.length ? `scope: ${roots.length} folder${roots.length > 1 ? 's' : ''} · ` : ''}"phrase" =exact a|b !x f: kw: {withTitles ? 'title: ' : ''}star: type: approx:
       </Text>
 
       {q.length > 0 && total === 0 && !busy && (
@@ -200,6 +211,14 @@ function SearchZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'searc
           <Text style={[ui.searchGroupLabel, {fontSize: 11 * s}]}>Keywords</Text>
           {res.keywords.map((k, i) => (
             <SearchRow key={'k' + i} icon="#" label={k.keyword} sub={`${noteTitle(k.file)} · p.${k.page}`} onPress={() => openFile(k.file, k.page)} s={s} font={ts.font} />
+          ))}
+        </View>
+      )}
+      {res.titles.length > 0 && (
+        <View style={ui.searchGroup}>
+          <Text style={[ui.searchGroupLabel, {fontSize: 11 * s}]}>Titles</Text>
+          {res.titles.map((t, i) => (
+            <SearchRow key={'t' + i} icon="≣" label={t.title} sub={`${noteTitle(t.file)} · p.${t.page}`} onPress={() => openFile(t.file, t.page)} s={s} font={ts.font} />
           ))}
         </View>
       )}
@@ -391,6 +410,7 @@ function ClipsZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type
   const labels = zone.labels ?? [];
   const filtered = clips.filter(
     c =>
+      c.kind !== 'todo' && // to-dos live in their own block
       (!folders.length || folders.some(r => c.sourcePath === r || c.sourcePath.startsWith(r.endsWith('/') ? r : r + '/'))) &&
       (!labels.length || c.labels.some(l => labels.includes(l))),
   );
@@ -449,6 +469,10 @@ function ClipsZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type
       reload();
     }
   };
+  const toTodo = async (c: Clip) => {
+    await setClipKind(c.id, 'todo'); // moves it to the To-do block
+    reload();
+  };
   const saveLabels = async (id: string, next: string[]) => {
     await setClipLabels(id, next);
     await reload();
@@ -457,7 +481,7 @@ function ClipsZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type
 
   return (
     <ZoneFrame theme={theme} hs={ts.hs} font={ts.font} title={zoneTitle(zone.title, 'Clips')} meta={visible.length ? String(visible.length) : undefined}>
-      {shown.length === 0 && <Text style={ui.empty}>No clips yet: lasso a note and tap “Clip to Dashboard”.</Text>}
+      {shown.length === 0 && <Text style={ui.empty}>No clips yet: lasso a note and tap “Dashboard Clip”.</Text>}
       {shown.length > 0 && visible.length === 0 && <Text style={ui.empty}>No clips match the label filter.</Text>}
       {(presentLabels.length > 0 || hasUnlabeled) && (
         <View style={{flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 6}}>
@@ -482,7 +506,7 @@ function ClipsZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type
             <Text style={[ui.noteHead, ts.head]}>📄 {noteTitle(file)}</Text>
             {cs.map(c => (
               <View key={c.id} style={{paddingVertical: 3}}>
-                <ClipCard c={c} ff={ff} textMode={textMode} repaint={repaint} collapsed={collapsedIds.has(c.id)} onToggleCollapse={() => toggleCollapse(c.id)} onEdit={setEditing} onDelete={del} />
+                <ClipCard c={c} ff={ff} textMode={textMode} repaint={repaint} collapsed={collapsedIds.has(c.id)} onToggleCollapse={() => toggleCollapse(c.id)} onEdit={setEditing} onDelete={del} onBridge={toTodo} />
               </View>
             ))}
           </View>
@@ -491,12 +515,262 @@ function ClipsZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type
         <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
           {visible.map(c => (
             <View key={c.id} style={{width: cellW, padding: 4}}>
-              <ClipCard c={c} ff={ff} textMode={textMode} repaint={repaint} showNote collapsed={collapsedIds.has(c.id)} onToggleCollapse={() => toggleCollapse(c.id)} onEdit={setEditing} onDelete={del} />
+              <ClipCard c={c} ff={ff} textMode={textMode} repaint={repaint} showNote collapsed={collapsedIds.has(c.id)} onToggleCollapse={() => toggleCollapse(c.id)} onEdit={setEditing} onDelete={del} onBridge={toTodo} />
             </View>
           ))}
         </View>
       )}
       {editing && <ClipLabelEditor clip={editing} font={ts.font} onSave={saveLabels} onClose={() => setEditing(null)} />}
+    </ZoneFrame>
+  );
+}
+
+
+/** To-do block: the captures filed as tasks. Same card as a clip (source header,
+ *  content, paste, labels) plus a tick-box; "Open" is the working list and "Done"
+ *  the archive, which is where finished tasks can be cleared. A to-do is never
+ *  deleted automatically (see addClip's prune). */
+function TodoZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type: 'todo'}>; theme: Theme; ts: TScale; nonce?: number; columns?: number}) {
+  const [clips, setClips] = useState<Clip[]>([]);
+  const [editing, setEditing] = useState<Clip | null>(null);
+  const [repaint, setRepaint] = useState(0);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
+  const [activeLabels, setActiveLabels] = useState<Set<string>>(() => new Set());
+  const [view, setView] = useState<'open' | 'done'>('open');
+  const [scanning, setScanning] = useState<{done: number; total: number; num: number; note: string} | null>(null);
+  const cancelScan = useRef(false);
+  const repaintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reload = () =>
+    listClips()
+      .then(cs => {
+        setClips(cs);
+        if (repaintTimer.current) clearTimeout(repaintTimer.current);
+        repaintTimer.current = setTimeout(() => setRepaint(r => r + 1), 450);
+      })
+      .catch(() => {});
+  useEffect(() => {
+    reload();
+    const sub = DeviceEventEmitter.addListener('dashboard_refresh_all', reload);
+    return () => {
+      sub.remove();
+      if (repaintTimer.current) clearTimeout(repaintTimer.current);
+    };
+  }, [nonce]);
+
+  const folders = zone.folders ?? [];
+  const labels = zone.labels ?? [];
+  const mine = clips.filter(
+    c =>
+      c.kind === 'todo' &&
+      (!folders.length || folders.some(r => c.sourcePath === r || c.sourcePath.startsWith(r.endsWith('/') ? r : r + '/'))) &&
+      (!labels.length || c.labels.some(l => labels.includes(l))),
+  );
+  const sort = zone.sort ?? 'new';
+  const sorted =
+    sort === 'old'
+      ? [...mine].reverse()
+      : sort === 'label'
+      ? [...mine].sort((a, b) => (a.labels[0] || '￿').localeCompare(b.labels[0] || '￿') || b.createdAt - a.createdAt)
+      : sort === 'note'
+      ? [...mine].sort((a, b) => noteTitle(a.sourcePath).localeCompare(noteTitle(b.sourcePath)) || a.sourcePage - b.sourcePage)
+      : mine;
+
+  const ff = ts.font ? {fontFamily: ts.font} : null;
+  const size = zone.size ?? 'M';
+  const grouped = sort === 'note';
+  const textMode = zone.textMode ?? 'hand';
+  const isGrid = (zone.display ?? 'list') === 'grid' && (columns ?? 1) === 1 && !grouped;
+  const perRow = isGrid ? {S: 3, M: 2, L: 1}[size] : 1;
+  const cellW: any = perRow > 1 ? `${Math.floor(100 / perRow)}%` : '100%';
+
+  const openCount = sorted.filter(c => !c.done).length;
+  const doneCount = sorted.filter(c => c.done).length;
+  const inView = sorted.filter(c => (view === 'done' ? c.done : !c.done));
+  const presentLabels = [...new Set(inView.flatMap(c => c.labels))].sort((a, b) => a.localeCompare(b));
+  const hasUnlabeled = inView.some(c => c.labels.length === 0);
+  const visible =
+    activeLabels.size === 0
+      ? inView
+      : inView.filter(c => (activeLabels.has('__none__') && c.labels.length === 0) || c.labels.some(l => activeLabels.has(l)));
+
+  const toggleLabelFilter = (l: string) =>
+    setActiveLabels(prev => {
+      const next = new Set(prev);
+      if (next.has(l)) next.delete(l);
+      else next.add(l);
+      return next;
+    });
+  const toggleCollapse = (id: string) =>
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  // Deep-search recovery when a to-do's box has been cut to another page/note.
+  // Escalates by consent (this note → last 5 opened → all), each step a native
+  // dialog whose "Stop" cancels; the time each scan took is shown so we learn
+  // what's reasonable.
+  const recoverTodoMark = async (c: Clip, want: boolean) => {
+    const num = c.markNum as number;
+    // One scoped scan behind a cancelable progress dialog. On a hit it re-anchors
+    // and ticks, then reports in a native dialog (Open note / OK) — not the easy-
+    // to-miss footer toast. Returns 'found' | 'miss' | 'stopped'.
+    const scan = async (paths: string[]): Promise<'found' | 'miss' | 'stopped'> => {
+      cancelScan.current = false;
+      setScanning({done: 0, total: 0, num, note: ''});
+      const hit = await deepFindMark(c, paths, () => !cancelScan.current, (done, total, note) => setScanning({done, total, num, note: note ? noteTitle(note) : ''}));
+      setScanning(null);
+      if (cancelScan.current) return 'stopped';
+      if (!hit) return 'miss';
+      const pageId = await pageIdAt(hit.path, hit.page).catch(() => '');
+      await reanchorClip(c.id, hit.path, hit.page, pageId);
+      if (want) await drawCheckInBox(hit.path, hit.page, hit.box);
+      else await eraseCheckInBox(hit.path, hit.page, hit.box);
+      reload();
+      const openIt = await NativeUIUtils.showRattaDialog(`Found #${num} on ${noteTitle(hit.path)} p.${hit.page + 1} (${hit.ms} ms) and ${want ? 'ticked' : 'unticked'} it.`, 'Open note', 'OK', true).catch(() => true);
+      if (openIt === false) openFile(hit.path, hit.page + 1); // left button
+      return 'found';
+    };
+    const go = await NativeUIUtils.showRattaDialog(`To-do #${num}: its box isn't on the expected page — it may have been cut elsewhere. Search this note to ${want ? 'tick' : 'untick'} it?`, 'Not now', 'Search note', false).catch(() => false);
+    if (!go) return;
+    if ((await scan([c.sourcePath])) !== 'miss') return;
+    const all = await NativeUIUtils.showRattaDialog(`Not in this note. Search all your notes (most-recent first)? You can Stop anytime.`, 'Not now', 'Search all', false).catch(() => false);
+    if (!all) return;
+    // Most-recently-modified first, source note already tried → best odds of a
+    // quick hit (recentModifiedFiles is mtime-desc).
+    const paths = (await recentModifiedFiles(500).catch(() => [])).filter(p => /\.note$/i.test(p) && p !== c.sourcePath);
+    if ((await scan(paths)) !== 'miss') return;
+    // Terminal, rare: a plain toast avoids a two-identical-buttons native dialog.
+    ToastAndroid.show(`Couldn't find #${num} on any note — its box may have been erased.`, ToastAndroid.LONG);
+  };
+
+
+  const toggleDone = async (c: Clip) => {
+    const next = !c.done;
+    DashboardNative?.appendLog?.(`[mark] toggle ${c.id} ${c.done}→${next}`).catch(() => {}); // TEMP: which branch runs
+    await setClipDone(c.id, next);
+    // Direction 1: mirror the tick on the source note — draw the check when
+    // ticking here, erase it when un-ticking. Only a to-do that HAS a mark on the
+    // note is expected to sync; if its mark can't be found (e.g. its box was
+    // lasso-cut to another page), say so instead of desyncing silently.
+    const okNote = next ? await writeTodoCheck(c) : await clearTodoCheck(c);
+    reload();
+    // A marked to-do whose box we can't find on its page was lasso-cut elsewhere.
+    // Offer to hunt it down (to tick OR untick) instead of desyncing silently.
+    if (typeof c.markNum === 'number' && !okNote) recoverTodoMark(c, next);
+  };
+  const toClip = async (c: Clip) => {
+    await setClipKind(c.id, 'clip'); // moves it to the Clips block
+    reload();
+  };
+  const del = async (id: string) => {
+    const ok = await NativeUIUtils.showRattaDialog('Delete this to-do?', 'Cancel', 'Delete', false).catch(() => false);
+    if (ok) {
+      await deleteClip(id);
+      reload();
+    }
+  };
+  const clearDone = async () => {
+    const ok = await NativeUIUtils.showRattaDialog(`Delete ${doneCount} finished to-do${doneCount > 1 ? 's' : ''}?`, 'Cancel', 'Delete', false).catch(() => false);
+    if (!ok) return;
+    for (const c of sorted.filter(x => x.done)) await deleteClip(c.id);
+    reload();
+  };
+  const saveLabels = async (id: string, next: string[]) => {
+    await setClipLabels(id, next);
+    await reload();
+    setEditing(e => (e && e.id === id ? {...e, labels: next} : e));
+  };
+
+  const card = (c: Clip, showNote?: boolean) => (
+    <ClipCard
+      c={c}
+      ff={ff}
+      textMode={textMode}
+      repaint={repaint}
+      showNote={showNote}
+      collapsed={collapsedIds.has(c.id)}
+      onToggleCollapse={() => toggleCollapse(c.id)}
+      onEdit={setEditing}
+      onDelete={del}
+      onBridge={toClip}
+      onToggleDone={toggleDone}
+    />
+  );
+
+  return (
+    <ZoneFrame theme={theme} hs={ts.hs} font={ts.font} title={zoneTitle(zone.title, 'To-do')} meta={openCount ? `${openCount} to do` : undefined}>
+      {sorted.length === 0 && <Text style={ui.empty}>No to-dos yet: lasso something in a note and tap “Dashboard To-do”.</Text>}
+      {sorted.length > 0 && (
+        <View style={{flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 4}}>
+          {([['open', `Open${openCount ? ` (${openCount})` : ''}`], ['done', `Done${doneCount ? ` (${doneCount})` : ''}`]] as const).map(([v, label]) => (
+            <TouchableOpacity key={v} onPress={() => setView(v)}>
+              <Text style={[view === v ? ui.clipTabOn : ui.clipTab, ff]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+          <View style={{flex: 1}} />
+          {view === 'done' && doneCount > 0 && (
+            <TouchableOpacity onPress={clearDone}>
+              <Text style={[ui.clipClear, ff]}>🗑 Clear done ({doneCount})</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {sorted.length > 0 && inView.length === 0 && <Text style={ui.empty}>{view === 'open' ? 'Nothing left to do. 🎉' : 'No finished to-dos yet.'}</Text>}
+      {inView.length > 0 && visible.length === 0 && <Text style={ui.empty}>No to-dos match the label filter.</Text>}
+      {(presentLabels.length > 0 || hasUnlabeled) && (
+        <View style={{flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 6}}>
+          {presentLabels.map(l => {
+            const on = activeLabels.has(l);
+            return (
+              <TouchableOpacity key={l} onPress={() => toggleLabelFilter(l)}>
+                <Text style={[on ? ui.clipChipOn : ui.clipChip, ff]}>{on ? '✓ ' : ''}{l}</Text>
+              </TouchableOpacity>
+            );
+          })}
+          {hasUnlabeled && (
+            <TouchableOpacity onPress={() => toggleLabelFilter('__none__')}>
+              <Text style={[activeLabels.has('__none__') ? ui.clipNoLabelOn : ui.clipNoLabel, ff]}>{activeLabels.has('__none__') ? '✓ ' : ''}no label</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {grouped ? (
+        groupClipsByNote(visible).map(([file, cs]) => (
+          <View key={file}>
+            <Text style={[ui.noteHead, ts.head]}>📄 {noteTitle(file)}</Text>
+            {cs.map(c => (
+              <View key={c.id} style={{paddingVertical: 3}}>
+                {card(c)}
+              </View>
+            ))}
+          </View>
+        ))
+      ) : (
+        <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
+          {visible.map(c => (
+            <View key={c.id} style={{width: cellW, padding: 4}}>
+              {card(c, true)}
+            </View>
+          ))}
+        </View>
+      )}
+      {editing && <ClipLabelEditor clip={editing} font={ts.font} onSave={saveLabels} onClose={() => setEditing(null)} />}
+      {scanning && (
+        <Modal transparent animationType="fade" visible onRequestClose={() => (cancelScan.current = true)}>
+          <View style={{flex: 1, backgroundColor: '#00000066', alignItems: 'center', justifyContent: 'center'}}>
+            <View style={{backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#000000', borderRadius: 12, padding: 20, minWidth: 230, alignItems: 'center'}}>
+              <Text style={[ui.itemText, ff, {fontWeight: '700', marginBottom: 6}]}>Searching for #{scanning.num}…</Text>
+              {scanning.note ? <Text style={[ui.metaMono, ff, {marginBottom: 4}]} numberOfLines={1}>{scanning.note}</Text> : null}
+              <Text style={[ui.metaMono, ff, {marginBottom: 14}]}>{scanning.done}/{scanning.total || '…'} pages</Text>
+              <TouchableOpacity onPress={() => (cancelScan.current = true)} hitSlop={{top: 10, bottom: 10, left: 16, right: 16}}>
+                <Text style={[ui.clipBtn, ff]}>■ Stop</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </ZoneFrame>
   );
 }
@@ -519,7 +793,7 @@ function groupClipsByNote(clips: Clip[]): [string, Clip[]][] {
  *  header stays visible when collapsed, so a long list reads as a compact index.
  *  In the grouped ("by document") view the note name lives in the group header,
  *  so `showNote` is omitted and only the page shows. */
-function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollapse, onEdit, onDelete}: {c: Clip; ff: any; textMode: 'hand' | 'ocr' | 'both'; repaint: number; showNote?: boolean; collapsed: boolean; onToggleCollapse: () => void; onEdit: (c: Clip) => void; onDelete: (id: string) => void}) {
+function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollapse, onEdit, onDelete, onBridge, onToggleDone}: {c: Clip; ff: any; textMode: 'hand' | 'ocr' | 'both'; repaint: number; showNote?: boolean; collapsed: boolean; onToggleCollapse: () => void; onEdit: (c: Clip) => void; onDelete: (id: string) => void; onBridge: (c: Clip) => void; onToggleDone?: (c: Clip) => void}) {
   // Per-block display: 'hand' = image; 'ocr' = text (image fallback when no
   // text yet); 'both' = image + text. Paste follows the same preference.
   const hasText = !!(c.text && c.text.trim());
@@ -527,6 +801,18 @@ function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollap
   const showText = wantsText && hasText;
   const showImage = textMode === 'hand' || textMode === 'both' || (textMode === 'ocr' && !hasText);
   const preferText = showText; // paste as a text box only when we're showing text
+  const struck = onToggleDone && c.done ? ui.clipDoneText : null;
+  const runPaste = async (pref: boolean) => {
+    if (clipOpening) return; // same guard as open: both end by leaving the plugin
+    clipOpening = true;
+    try {
+      await pasteClip(c, pref);
+    } finally {
+      setTimeout(() => {
+        clipOpening = false;
+      }, 1200);
+    }
+  };
   const openSource = async () => {
     if (clipOpening) return; // guard: resolve is async (may scan notes) — ignore repeat taps
     clipOpening = true;
@@ -544,13 +830,32 @@ function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollap
     <View style={ui.clipCard}>
       {/* Header: source note/page + labels; tap toggles the body. */}
       <TouchableOpacity style={ui.clipCardHead} activeOpacity={0.7} onPress={onToggleCollapse}>
+        {onToggleDone && (
+          // Ticking the box must not also collapse the card.
+          <TouchableOpacity
+            onPress={e => {
+              e.stopPropagation();
+              onToggleDone(c);
+            }}
+            hitSlop={{top: 10, bottom: 10, left: 10, right: 6}}>
+            <View style={c.done ? ui.clipCheckOn : ui.clipCheck}>{c.done ? <Text style={ui.clipCheckMark}>✓</Text> : null}</View>
+          </TouchableOpacity>
+        )}
         <View style={{flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center'}}>
-          <Text style={[ui.metaMono, ff, {marginRight: 6}]} numberOfLines={1}>
+          <Text style={[ui.metaMono, ff, struck, {marginRight: 6}]} numberOfLines={1}>
             {showNote ? noteTitle(c.sourcePath) + (c.sourcePage >= 0 ? ` · p.${c.sourcePage + 1}` : '') : c.sourcePage >= 0 ? `p.${c.sourcePage + 1}` : ''}
           </Text>
           {c.labels.map(l => (
             <Text key={l} style={[ui.clipChip, ff]}>{l}</Text>
           ))}
+          <TouchableOpacity
+            onPress={e => {
+              e.stopPropagation(); // editing labels must not collapse the card
+              onEdit(c);
+            }}
+            hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
+            <Text style={[ui.clipChipAdd, ff]}>🏷 +</Text>
+          </TouchableOpacity>
         </View>
         <Text style={ui.clipChevron}>{collapsed ? '▸' : '▾'}</Text>
       </TouchableOpacity>
@@ -561,44 +866,49 @@ function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollap
               reorder AND a move to another note; self-heals the stored source). */}
           <TouchableOpacity onPress={openSource} activeOpacity={0.7}>
             {showImage && (
-              <Image
-                key={'clipimg-' + repaint}
-                source={{uri: 'file://' + c.png}}
-                style={{width: '100%', maxWidth: c.w || 480, aspectRatio: c.w && c.h ? c.w / c.h : 1.6, borderWidth: 1, borderColor: '#000000', borderRadius: 6, backgroundColor: '#ffffff'}}
-                resizeMode="contain"
-              />
+              <View style={{position: 'relative'}}>
+                <Image
+                  key={'clipimg-' + repaint}
+                  source={{uri: 'file://' + c.png}}
+                  style={{width: '100%', maxWidth: c.w || 480, aspectRatio: c.w && c.h ? c.w / c.h : 1.6, borderWidth: 1, borderColor: '#000000', borderRadius: 6, backgroundColor: '#ffffff'}}
+                  resizeMode="contain"
+                />
+                {/* Handwriting can't be "line-through", so a done to-do gets a
+                    drawn diagonal instead — the same signal as the struck text. */}
+                {struck && <View pointerEvents="none" style={ui.clipStrikeBar} />}
+              </View>
             )}
             {showText && (
               <View style={[ui.clipTextBox, showImage ? {marginTop: 4} : null]}>
-                <Text style={[ui.clipText, ff]} numberOfLines={6}>
+                <Text style={[ui.clipText, ff, struck]} numberOfLines={6}>
                   {c.text}
                 </Text>
               </View>
             )}
           </TouchableOpacity>
           {/* Actions: Label / Paste on the left, delete ✕ pushed to the far right. */}
-          <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 6}}>
-            <TouchableOpacity onPress={() => onEdit(c)} hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
-              <Text style={[ui.clipBtn, ff]}>🏷 Label</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={async () => {
-                if (clipOpening) return; // same guard as open: both end by leaving the plugin
-                clipOpening = true;
-                try {
-                  await pasteClip(c, preferText);
-                } finally {
-                  setTimeout(() => {
-                    clipOpening = false;
-                  }, 1200);
-                }
-              }}
-              hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
-              <Text style={[ui.clipBtn, ff]}>📋 Paste</Text>
+          <View style={{flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 6}}>
+            {textMode === 'both' && hasText ? (
+              // 'both' shows image + text, so offer BOTH paste targets explicitly.
+              <>
+                <TouchableOpacity onPress={() => runPaste(false)} hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
+                  <Text style={[ui.clipBtn, ff]}>📋 Paste Image</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => runPaste(true)} hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
+                  <Text style={[ui.clipBtn, ff]}>📋 Paste Text</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity onPress={() => runPaste(preferText)} hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
+                <Text style={[ui.clipBtn, ff]}>📋 Paste</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => onBridge(c)} hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
+              <Text style={[ui.clipBtn, ff]}>{c.kind === 'todo' ? '→ Clip' : '→ To-do'}</Text>
             </TouchableOpacity>
             <View style={{flex: 1}} />
             <TouchableOpacity onPress={() => onDelete(c.id)} hitSlop={{top: 10, bottom: 10, left: 12, right: 8}} style={{paddingLeft: 14}}>
-              <Text style={ui.clipDel}>✕</Text>
+              <Text style={ui.clipDel}>🗑</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -676,7 +986,7 @@ function RecentZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'recen
     const sub = DeviceEventEmitter.addListener('dashboard_refresh_all', () => readRecent().then(setPaths));
     return () => sub.remove();
   }, []);
-  const items = (paths ?? []).slice(0, zone.count ?? RECENT_MAX); // normalize() clamps count
+  const items = (paths ?? []).slice(0, zone.count ?? RECENT_DEFAULT); // normalize() clamps count
   const display = zone.display ?? 'list';
   return (
     <ZoneFrame theme={theme} hs={ts.hs} font={ts.font} title={zoneTitle(zone.title, 'Recent')}>
@@ -698,6 +1008,63 @@ function RecentZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'recen
 /** Themed shell around a zone's body. */
 /** Section title: undefined -> the type's default label; '' -> no title (user cleared it). */
 const zoneTitle = (t: string | undefined, fallback: string): string => (t === undefined ? fallback : t);
+
+/** Table of contents of the CURRENTLY-OPEN note: its Supernote "Title" headings,
+ *  OCR'd (see notetoc.ts). Tap a heading to jump to its page. Shows a friendly
+ *  message when the dashboard is over a PDF/EPUB or nothing (no titles there). */
+function TocZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'toc'}>; theme: Theme; ts: TScale; nonce?: number}) {
+  const [data, setData] = useState<{path: string; readable: boolean; titles: TocEntry[]} | null>(null);
+  const load = () => {
+    (async () => {
+      let p = '';
+      try {
+        p = unwrap<string>(await PluginCommAPI.getCurrentFilePath()) ?? '';
+      } catch {
+        /* no current file */
+      }
+      // Keep the current outline visible while refreshing the SAME note (a cache
+      // hit is instant, so there's no flicker); only blank when the note changed.
+      setData(cur => (cur && cur.path === p ? cur : null));
+      setData({path: p, ...(await readNoteToc(p))});
+    })();
+  };
+  useEffect(load, [nonce]);
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('dashboard_refresh_all', async () => {
+      // Manual refresh: persist the editor's unsaved edits first, or a heading
+      // just written on the page underneath wouldn't be in the file we read.
+      await flushCurrentNote([]);
+      load();
+    });
+    return () => sub.remove();
+  }, []);
+
+  const s = ts.s;
+  // Title.style (1..4) is a VISUAL style, not a strict level; the user maps each
+  // style to an indent level via titleLevels (index = style-1).
+  // normalizeZone guarantees titleLevels is a length-4 array of 1..4.
+  const levels = zone.titleLevels ?? [1, 2, 3, 4];
+  const depthOf = (style: number) => (zone.indentByStyle ? levels[Math.min(3, Math.max(1, style || 1) - 1)] - 1 : 0);
+  // Header shows WHICH note this outline is for. Append the current note's name
+  // to the block title (': Name'); when the title is blank, show just the name.
+  const note = data?.readable && data.path ? noteTitle(data.path) : '';
+  const base = zoneTitle(zone.title, 'Contents');
+  const heading = note ? (base ? `${base}: ${note}` : note) : base;
+  return (
+    <ZoneFrame theme={theme} hs={ts.hs} font={ts.font} title={heading}>
+      {data === null && <Text style={ui.empty}>reading titles…</Text>}
+      {data && !data.readable && <Text style={ui.empty}>Open a note to see its outline.</Text>}
+      {data && data.readable && data.titles.length === 0 && <Text style={ui.empty}>No titles in this note.</Text>}
+      {data &&
+        data.readable &&
+        data.titles.map((t, i) => (
+          <View key={i} style={{marginLeft: depthOf(t.style) * 14}}>
+            <SearchRow icon="·" label={t.text} sub={`p.${t.page}`} onPress={() => data?.path && openFile(data.path, t.page)} s={s} font={ts.font} />
+          </View>
+        ))}
+    </ZoneFrame>
+  );
+}
 
 /** Per-zone chrome (collapse state + toggle + type icon), supplied by ZoneView so
  *  ZoneFrame doesn't need every zone component to thread these props. */

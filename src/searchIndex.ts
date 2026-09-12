@@ -11,6 +11,7 @@
  */
 import {NativeModules} from 'react-native';
 
+import {allTitles} from './notetoc';
 import {cacheDir} from './paths';
 
 const {DashboardNative} = NativeModules;
@@ -44,12 +45,18 @@ export interface KwEntry {
   file: string;
   page: number; // 1-based
 }
+export interface TitleHit {
+  title: string;
+  file: string;
+  page: number; // 1-based
+}
 export interface SearchResults {
   folders: IndexEntry[];
   notes: IndexEntry[];
   pdfs: IndexEntry[];
   docs: IndexEntry[]; // epub / cbz / xps / fb2
   keywords: KwEntry[];
+  titles: TitleHit[]; // note headings (from the TOC cache), when the block enables them
 }
 
 interface DirEntry {
@@ -161,6 +168,16 @@ export async function loadKeywords(): Promise<KwEntry[]> {
   }
 }
 
+/** Note headings for the Search block. notetoc owns the cache shape and its
+ *  in-memory copy, so we ask it rather than re-parsing toccache.json here. */
+export async function loadTitles(): Promise<TitleHit[]> {
+  try {
+    return await allTitles();
+  } catch {
+    return [];
+  }
+}
+
 /** Lower-case + strip diacritics so "Réunion" matches "reunion". */
 const fold = (s: string): string => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
@@ -192,6 +209,7 @@ interface ParsedQuery {
   terms: TextTerm[]; // ANDed; a negated term must fail to match
   approx: boolean; // approx: → subsequence match (typo-tolerant; skips phrases/exact)
   kwOnly: boolean; // kw:     → only keyword results
+  titleOnly: boolean; // title:  → only note-heading results
   starOnly: boolean; // star:   → only files that have a five-star
   folder: string; // f:xxx   → restrict to items whose path contains this (folded)
   types: Set<string>; // type:  → keep only these kinds (folder|note|pdf|doc)
@@ -235,7 +253,7 @@ function addTerm(pq: ParsedQuery, raw: string, quoted: boolean): void {
 /** SmartNoteAI-style grammar: words (ANDed) · "phrase" · =exact · a|b · !not ·
  *  f:folder · kw: · star: · type:note|pdf|doc|folder · approx: */
 function parseQuery(raw: string): ParsedQuery {
-  const pq: ParsedQuery = {terms: [], approx: false, kwOnly: false, starOnly: false, folder: '', types: new Set()};
+  const pq: ParsedQuery = {terms: [], approx: false, kwOnly: false, titleOnly: false, starOnly: false, folder: '', types: new Set()};
   for (const {t, quoted} of rawTokens(raw)) {
     if (!quoted) {
       const m = /^([a-z]+):(.*)$/i.exec(t);
@@ -248,6 +266,11 @@ function parseQuery(raw: string): ParsedQuery {
         }
         if (key === 'kw') {
           pq.kwOnly = true;
+          if (val) addTerm(pq, val, false);
+          continue;
+        }
+        if (key === 'title') {
+          pq.titleOnly = true;
           if (val) addTerm(pq, val, false);
           continue;
         }
@@ -337,6 +360,23 @@ function prepEntries(idx: IndexData): {f: string[]; fp: string[]} {
   return a._prep;
 }
 
+/** Folded title + path per TitleHit, computed once per loaded array and cached
+ *  on it. Without this every keystroke re-folds every heading (fold() does a
+ *  toLowerCase + NFD normalize + regex), which is exactly the e-ink search lag
+ *  prepEntries() was introduced to kill. */
+function prepTitles(titles: TitleHit[]): {f: string[]; fp: string[]} {
+  const a = titles as any;
+  if (a._prep && a._prep.f.length === titles.length) return a._prep;
+  const f: string[] = new Array(titles.length);
+  const fp: string[] = new Array(titles.length);
+  for (let i = 0; i < titles.length; i++) {
+    f[i] = fold(titles[i].title);
+    fp[i] = fold(titles[i].file);
+  }
+  a._prep = {f, fp};
+  return a._prep;
+}
+
 function underRoots(path: string, roots?: string[]): boolean {
   if (!roots || !roots.length) return true; // no scope → whole device
   return roots.some(r => path === r || path.startsWith(r.endsWith('/') ? r : r + '/'));
@@ -345,6 +385,7 @@ function underRoots(path: string, roots?: string[]): boolean {
 export interface SearchOpts {
   roots?: string[]; // Stars-style folder scope
   starred?: Set<string>; // file paths that have a five-star (for star:)
+  titles?: TitleHit[]; // note headings to search (empty/absent = the block has titles off)
   cap?: number;
 }
 
@@ -352,10 +393,10 @@ export interface SearchOpts {
  *  and keywords are separate. See parseQuery for the grammar. */
 export function runSearch(idx: IndexData | null, kws: KwEntry[], rawQuery: string, opts: SearchOpts = {}): SearchResults {
   const {roots, starred, cap = 40} = opts;
-  const empty: SearchResults = {folders: [], notes: [], pdfs: [], docs: [], keywords: []};
+  const empty: SearchResults = {folders: [], notes: [], pdfs: [], docs: [], keywords: [], titles: []};
   const pq = parseQuery(rawQuery);
   // Active if there's any text OR any filter; so `star:` / `type:pdf` / `f:x` alone still list results.
-  const active = pq.terms.length > 0 || pq.starOnly || pq.types.size > 0 || pq.folder !== '' || pq.kwOnly;
+  const active = pq.terms.length > 0 || pq.starOnly || pq.types.size > 0 || pq.folder !== '' || pq.kwOnly || pq.titleOnly;
   if (!idx || !active) return empty;
 
   const folderOk = (path: string) => !pq.folder || fold(path).includes(pq.folder);
@@ -364,7 +405,7 @@ export function runSearch(idx: IndexData | null, kws: KwEntry[], rawQuery: strin
   // Keywords: match on the keyword text; scoped by the file's folder + roots.
   // star:/type: (other than note) suppress them; kw: makes them the only results.
   let keywords: (KwEntry & {r: number})[] = [];
-  if (!pq.starOnly && typeOk('note')) {
+  if (!pq.starOnly && !pq.titleOnly && typeOk('note')) {
     const seenKw = new Map<string, KwEntry & {r: number}>();
     for (const k of kws) {
       if (!underRoots(k.file, roots) || !folderOk(k.file)) continue;
@@ -377,6 +418,27 @@ export function runSearch(idx: IndexData | null, kws: KwEntry[], rawQuery: strin
     keywords = [...seenKw.values()].sort((a, b) => b.r - a.r || a.keyword.localeCompare(b.keyword)).slice(0, cap);
   }
   if (pq.kwOnly) return {...empty, keywords};
+
+  // Note headings: shown when the block enables titles, or forced-only by `title:`.
+  // Scoped like keywords (a heading belongs to a note). star:/other type: suppress.
+  let titles: (TitleHit & {r: number})[] = [];
+  const allT = opts.titles ?? [];
+  if (allT.length && !pq.starOnly && typeOk('note')) {
+    const prepT = prepTitles(allT); // folded once per load, not per keystroke
+    const seenT = new Map<string, TitleHit & {r: number}>();
+    for (let i = 0; i < allT.length; i++) {
+      const t = allT[i];
+      if (!underRoots(t.file, roots)) continue;
+      if (pq.folder && !prepT.fp[i].includes(pq.folder)) continue;
+      const r = matchAllF(prepT.f[i], pq);
+      if (r < 0) continue;
+      const key = prepT.f[i] + '@' + t.file + '@' + t.page; // distinct heading occurrences
+      const prev = seenT.get(key);
+      if (!prev || r > prev.r) seenT.set(key, {...t, r});
+    }
+    titles = [...seenT.values()].sort((a, b) => b.r - a.r || a.title.localeCompare(b.title)).slice(0, cap);
+  }
+  if (pq.titleOnly && allT.length) return {...empty, titles};
 
   const folders: (IndexEntry & {r: number})[] = [];
   const notes: (IndexEntry & {r: number})[] = [];
@@ -412,6 +474,7 @@ export function runSearch(idx: IndexData | null, kws: KwEntry[], rawQuery: strin
     pdfs: pdfs.slice(0, cap),
     docs: docs.slice(0, cap),
     keywords,
+    titles,
   };
 }
 

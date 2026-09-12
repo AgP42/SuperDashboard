@@ -69,6 +69,19 @@ async function readFooterPages(path: string): Promise<{size: number; pages: {pag
   return {size, pages};
 }
 
+/** Per-page change signal (like SmartNoteAI's footer signature): each page's
+ *  block ADDRESS from the footer. The .note format is append-only, so a page's
+ *  block address changes ONLY when that page's own edit is flushed to the footer
+ *  — not when another page changes, and not merely when the file grows (the size
+ *  grows before the footer is rewritten, which is why the address, not the size,
+ *  is the reliable signal). Costs a single footer read (no per-page reads, no
+ *  OCR). Ordered by 0-indexed page. null if the file isn't a readable .note. */
+export async function readPageRevs(path: string): Promise<{page: number; rev: string}[] | null> {
+  const fp = await readFooterPages(path);
+  if (!fp) return null;
+  return fp.pages.map(p => ({page: p.page, rev: String(p.addr)})).sort((a, b) => a.page - b.page);
+}
+
 /** PAGEID marker in a page block ('' if none). */
 function pageIdFromBlock(block: string): string {
   const id = /<PAGEID:([^>]+)>/.exec(block);

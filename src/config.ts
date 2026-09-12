@@ -14,8 +14,12 @@ const {DashboardNative} = NativeModules;
 const CONFIG_PATH = '/storage/emulated/0/MyStyle/Plugins/Dashboard/config.json';
 const LEGACY_CONFIG_PATH = '/storage/emulated/0/MyStyle/Dashboard/config.json';
 
-/** The device's own /Recent/Recent.txt only ever holds the last 8 opened files. */
-export const RECENT_MAX = 8;
+/** Max recent files a block can show. We rebuild the recent list ourselves from
+ *  file mtime (the device's /Recent is out of scope on current firmware), so the
+ *  old 8-item device cap no longer applies; this is just our own ceiling. */
+export const RECENT_MAX = 20;
+/** Default count for a new/blank recent block. */
+export const RECENT_DEFAULT = 8;
 
 /** The bubble is icon-only now (the house) or off. Older configs used 'label'/'hint';
  *  normalize() folds those into 'icon'. */
@@ -80,6 +84,8 @@ export const ZONE_ICONS: Record<string, string> = {
   status: '🔋',
   nav: '🗂️',
   clips: '✂️',
+  todo: '☑',
+  toc: '≣',
   spacer: '▢',
 };
 
@@ -97,6 +103,8 @@ export const ZONE_LABELS: Record<string, string> = {
   status: 'Device',
   nav: 'Files',
   clips: 'Clips',
+  todo: 'To-do',
+  toc: 'Contents',
   spacer: 'Empty',
 };
 
@@ -131,10 +139,12 @@ export type Zone = ZoneCommon &
     | {type: 'apps'; title?: string; apps: AppItem[]; display?: ItemDisplay}
     | {type: 'recent'; title?: string; count?: number; display?: ItemDisplay}
     | {type: 'clock'; title?: string; style?: ClockStyle; hour24?: boolean; locale?: string; showDate?: boolean; weekNum?: WeekNum; extras?: ClockExtra[]}
-    | {type: 'search'; title?: string; folders?: string[]}
+    | {type: 'search'; title?: string; folders?: string[]; searchTitles?: boolean}
     | {type: 'status'; title?: string; battery?: boolean; storage?: boolean; stats?: boolean}
     | {type: 'nav'; title?: string; root?: string}
     | {type: 'clips'; title?: string; folders?: string[]; labels?: string[]; display?: 'grid' | 'list'; sort?: ClipSort; size?: 'S' | 'M' | 'L'; textMode?: ClipTextMode}
+    | {type: 'todo'; title?: string; folders?: string[]; labels?: string[]; display?: 'grid' | 'list'; sort?: ClipSort; size?: 'S' | 'M' | 'L'; textMode?: ClipTextMode}
+    | {type: 'toc'; title?: string; indentByStyle?: boolean; titleLevels?: number[]}
     | {type: 'spacer'; title?: string}
   );
 
@@ -187,6 +197,11 @@ export interface DashboardConfig {
   clipText?: ClipText;
   /** Font size (px) for an OCR'd clip pasted as a text box. */
   clipFontSize?: number;
+  /** Add a "↩ source" link under a pasted clip. Off = paste the bare image. */
+  clipBacklink?: boolean;
+  /** Paste a handwriting clip as two superimposed copies, so a lasso never holds
+   *  a lone picture (which the note app resizes instead of moving). Default on. */
+  clipPasteTwin?: boolean;
   /** MyStyle/fonts .ttf/.otf path for an OCR'd clip pasted as a text box; '' / undefined = the note's default font. */
   clipFontPath?: string;
   zones: Zone[];
@@ -313,14 +328,21 @@ function normalize(raw: any): DashboardConfig {
   const showIcons = raw?.showIcons === true;
   const clipFrame: ClipFrame = ['off', 'grey', 'black'].includes(raw?.clipFrame) ? raw.clipFrame : 'off';
   const clipText: ClipText = raw?.clipText === 'ocr' ? 'ocr' : 'hand';
-  const clipFontSize: number =
-    typeof raw?.clipFontSize === 'number' && raw.clipFontSize >= 12 && raw.clipFontSize <= 96 ? raw.clipFontSize : 36;
+  // The pasted text box is now sized snugly to the text, so clipFontSize IS the
+  // size that renders (WYSIWYG). It used to be ~1/3 of it: the old oversized box
+  // made the firmware re-fit any 28/36/48 choice up to ~96 on the first relayout.
+  // Migrate those legacy values to the size they actually produced.
+  const rawSize = typeof raw?.clipFontSize === 'number' ? raw.clipFontSize : 96;
+  const clipFontSize: number = rawSize <= 48 ? 96 : Math.min(220, rawSize);
   const clipFontPath: string | undefined = typeof raw?.clipFontPath === 'string' && raw.clipFontPath ? raw.clipFontPath : undefined;
-  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, clipFrame, clipText, clipFontSize, clipFontPath, zones};
+  const clipPasteTwin: boolean = raw?.clipPasteTwin !== false; // default on
+  const clipBacklink: boolean = raw?.clipBacklink !== false; // default on
+
+  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, clipFrame, clipText, clipFontSize, clipFontPath, clipPasteTwin, clipBacklink, zones};
 }
 
 function isZone(z: any): z is Zone {
-  return z && ['shortcuts', 'stars', 'keywords', 'apps', 'recent', 'clock', 'search', 'status', 'nav', 'clips', 'spacer'].includes(z.type);
+  return z && ['shortcuts', 'stars', 'keywords', 'apps', 'recent', 'clock', 'search', 'status', 'nav', 'clips', 'todo', 'toc', 'spacer'].includes(z.type);
 }
 
 /** Guarantee a zone's required arrays/fields exist so a hand-edited config
@@ -337,8 +359,8 @@ function normalizeZone(z: any): Zone {
     case 'apps':
       return {...z, apps: arr(z.apps)};
     case 'recent':
-      // A higher count can't show more than the device tracks; clamp to [1, RECENT_MAX].
-      return {...z, count: Math.min(RECENT_MAX, Math.max(1, typeof z.count === 'number' ? z.count : RECENT_MAX))};
+      // Clamp to [1, RECENT_MAX]; fall back to RECENT_DEFAULT when unset.
+      return {...z, count: Math.min(RECENT_MAX, Math.max(1, typeof z.count === 'number' ? z.count : RECENT_DEFAULT))};
     case 'clock': {
       const extras: ClockExtra[] = Array.isArray(z.extras)
         ? z.extras
@@ -356,11 +378,12 @@ function normalizeZone(z: any): Zone {
       };
     }
     case 'search':
-      return {...z, folders: arr(z.folders)}; // empty = whole device
+      return {...z, folders: arr(z.folders), searchTitles: !!z.searchTitles}; // empty folders = whole device
     case 'status':
     case 'nav':
       return {...z};
     case 'clips':
+    case 'todo':
       return {
         ...z,
         folders: arr(z.folders),
@@ -369,6 +392,16 @@ function normalizeZone(z: any): Zone {
         size: ['S', 'M', 'L'].includes(z.size) ? z.size : 'M',
         textMode: ['hand', 'ocr', 'both'].includes(z.textMode) ? z.textMode : 'hand',
       };
+    case 'toc': {
+      // titleLevels maps each of the 4 title styles (index = style-1) to an indent
+      // level 1..4; default identity. Kept length-4 and clamped so a hand-edited
+      // config can't break the indent math.
+      const tl =
+        Array.isArray(z.titleLevels) && z.titleLevels.length === 4
+          ? z.titleLevels.map((n: any) => Math.min(4, Math.max(1, typeof n === 'number' ? n : 1)))
+          : [1, 2, 3, 4];
+      return {...z, indentByStyle: !!z.indentByStyle, titleLevels: tl};
+    }
     case 'spacer':
       return {...z}; // empty block; height comes from `h` (set in normalize)
     default:

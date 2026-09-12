@@ -234,6 +234,39 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
         }
     }
 
+    /** Whether an absolute path exists (used before recreating a Picture's backing PNG). */
+    @ReactMethod
+    public void fileExists(String path, Promise promise) {
+        try {
+            promise.resolve(new File(path).exists());
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
+    /** Copy src → dst (overwrites). Used to recreate a Picture element's backing PNG,
+     *  which the note app deletes after save, before modifyElements repositions it. */
+    @ReactMethod
+    public void copyFile(String src, String dst, Promise promise) {
+        try {
+            File s = new File(src);
+            if (!s.exists()) { promise.reject("COPY_FAILED", "source missing: " + src); return; }
+            File d = new File(dst);
+            File parent = d.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            try (java.io.FileInputStream in = new java.io.FileInputStream(s);
+                 java.io.FileOutputStream out = new java.io.FileOutputStream(d, false)) {
+                byte[] buf = new byte[65536];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                out.flush();
+            }
+            promise.resolve(true);
+        } catch (Exception e) {
+            promise.reject("COPY_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        }
+    }
+
     /** Delete files in `dir` whose name starts with `prefix`, except `keepName`.
      *  Used to prune stale per-page handwriting PNGs (line_<hash>_p<n>_<mtime>.png). */
     @ReactMethod

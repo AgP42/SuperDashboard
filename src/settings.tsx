@@ -20,6 +20,7 @@ import {
   KeywordDisplay,
   loadConfig,
   NoteSort,
+  RECENT_DEFAULT,
   RECENT_MAX,
   saveConfig,
   TextScale,
@@ -37,6 +38,8 @@ import {
 import {setRoute} from './route';
 import {leavePlugin} from './bubble';
 import {scanKeywords, basename, noteTitle} from './scanner';
+import {buildIndex} from './searchIndex';
+import {indexTitles} from './notetoc';
 import {APP_BLOCK, CURATED_APPS} from './apps';
 import {Btn, fileGlyph as fileKindGlyph, ui} from './ui';
 import {ClockFace} from './clock';
@@ -295,11 +298,26 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
       />
 
       <Text style={ui.wizStepTag}>Note clips</Text>
-      <Text style={ui.subLabel}>In a note, lasso something and tap “Clip to Dashboard” to send it to a Clips block. Optionally mark the captured area on the note.</Text>
+      <Text style={ui.subLabel}>In a note, lasso something and tap “Dashboard Clip” to send it to a Clips block. Optionally mark the captured area on the note.</Text>
       <Seg
         options={[{v: 'off', label: 'No frame'}, {v: 'grey', label: 'Grey frame'}, {v: 'black', label: 'Black frame'}]}
         value={cfg.clipFrame ?? 'off'}
         onChange={v => update(c => void (c.clipFrame = v as 'off' | 'grey' | 'black'))}
+      />
+      <Text style={ui.subLabel}>Add a “↩ source” link under a pasted clip.</Text>
+      <Seg
+        options={[{v: 'on', label: 'With link'}, {v: 'off', label: 'Image only'}]}
+        value={cfg.clipBacklink === false ? 'off' : 'on'}
+        onChange={v => update(c => void (c.clipBacklink = v === 'on'))}
+      />
+      <Text style={ui.subLabel}>
+        Paste handwriting clips as two superimposed copies. The note app resizes a picture when it is the ONLY thing in a
+        lasso, so a lone pasted image shrinks a little each time you move it; a hidden twin keeps the selection a group.
+      </Text>
+      <Seg
+        options={[{v: 'on', label: 'Twin (no shrink)'}, {v: 'off', label: 'Single copy'}]}
+        value={cfg.clipPasteTwin === false ? 'off' : 'on'}
+        onChange={v => update(c => void (c.clipPasteTwin = v === 'on'))}
       />
       <Text style={ui.subLabel}>Keep the handwriting (image), or OCR the clip to text you can paste as an editable text box (falls back to the image when OCR finds nothing).</Text>
       <Seg
@@ -311,8 +329,8 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
         <>
           <Text style={ui.subLabel}>Pasted text size.</Text>
           <Seg
-            options={[{v: '28', label: 'S'}, {v: '36', label: 'M'}, {v: '48', label: 'L'}]}
-            value={String(cfg.clipFontSize ?? 36)}
+            options={[{v: '64', label: 'S'}, {v: '96', label: 'M'}, {v: '128', label: 'L'}]}
+            value={String(cfg.clipFontSize ?? 96)}
             onChange={v => update(c => void (c.clipFontSize = parseInt(v, 10)))}
           />
           <Text style={ui.subLabel}>Pasted text font (MyStyle/fonts).</Text>
@@ -355,7 +373,7 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
   );
 }
 
-const ADDABLE: Zone['type'][] = ['shortcuts', 'stars', 'keywords', 'apps', 'recent', 'clock', 'search', 'status', 'nav', 'clips'];
+const ADDABLE: Zone['type'][] = ['shortcuts', 'stars', 'keywords', 'apps', 'recent', 'clock', 'search', 'status', 'nav', 'clips', 'todo', 'toc'];
 
 /** Icon + name for a placed block in the canvas. */
 function blockLabel(z: Zone): string {
@@ -525,6 +543,16 @@ function ZoneContentEditor({
       {z.type === 'status' && <StatusEditor i={i} zone={z} update={update} />}
       {z.type === 'nav' && <NavEditor i={i} zone={z} update={update} openModal={openModal} />}
       {z.type === 'clips' && <ClipsEditor i={i} zone={z} update={update} openModal={openModal} ocrGlobal={ocrGlobal} />}
+      {z.type === 'todo' && (
+        <View>
+          <Text style={ui.subLabel}>
+            In a note, lasso something and tap “Dashboard To-do” to file it as a task. Its captured area is marked with a frame and an empty
+            tick-box, so clips and to-dos are told apart on the note itself.
+          </Text>
+          <ClipsEditor i={i} zone={z} update={update} openModal={openModal} ocrGlobal={ocrGlobal} />
+        </View>
+      )}
+      {z.type === 'toc' && <TocEditor i={i} zone={z} update={update} />}
       {showHeight && (
         <View>
           <Text style={ui.subLabel}>Height{vmode === 'masonry' ? ' (empty block)' : ' (Fixed mode: content scrolls inside)'}</Text>
@@ -1123,13 +1151,53 @@ function moveItem(arr: any[], i: number, dir: number) {
   const [x] = arr.splice(i, 1);
   arr.splice(j, 0, x);
 }
+const TITLE_STYLE_NAMES = ['black', 'gray/white', 'gray/black', 'shadow']; // Title.style 1..4
+function TocEditor({i, zone, update}: {i: number; zone: Extract<Zone, {type: 'toc'}>; update: UP}) {
+  const on = !!zone.indentByStyle;
+  const levels = zone.titleLevels ?? [1, 2, 3, 4]; // normalizeZone guarantees length 4, values 1..4
+  return (
+    <View>
+      <Text style={ui.subLabel}>Shows the headings of the note open behind the dashboard; tap one to jump to its page. OCR runs once per note (cached).</Text>
+      <Text style={ui.subLabel}>Indent by title level</Text>
+      <Seg
+        options={[{v: 'off', label: 'Off'}, {v: 'on', label: 'On'}]}
+        value={on ? 'on' : 'off'}
+        onChange={v => update(c => void ((c.zones[i] as any).indentByStyle = v === 'on'))}
+      />
+      {on && (
+        <View style={{marginTop: 4}}>
+          <Text style={ui.subLabel}>Which indent level each title style means</Text>
+          {TITLE_STYLE_NAMES.map((nm, k) => (
+            <View key={k} style={{marginTop: 4}}>
+              <Text style={ui.subLabel}>
+                Style {k + 1} ({nm}) → level
+              </Text>
+              <Seg
+                options={[{v: '1', label: '1'}, {v: '2', label: '2'}, {v: '3', label: '3'}, {v: '4', label: '4'}]}
+                value={String(levels[k])}
+                onChange={v =>
+                  update(c => {
+                    const z = c.zones[i] as any;
+                    const arr = [...(z.titleLevels ?? [1, 2, 3, 4])];
+                    arr[k] = Number(v);
+                    z.titleLevels = arr;
+                  })
+                }
+              />
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 function RecentEditor({i, zone, update}: {i: number; zone: Extract<Zone, {type: 'recent'}>; update: UP}) {
   return (
     <View>
-      <Text style={ui.subLabel}>How many (Supernote only tracks the last {RECENT_MAX} opened; {RECENT_MAX} max)</Text>
+      <Text style={ui.subLabel}>How many recent files to show (up to {RECENT_MAX}; some firmware only tracks the last 8 opened)</Text>
       <Seg
-        options={[{v: '3', label: '3'}, {v: '5', label: '5'}, {v: String(RECENT_MAX), label: String(RECENT_MAX)}]}
-        value={String(zone.count ?? RECENT_MAX)}
+        options={[{v: '4', label: '4'}, {v: '8', label: '8'}, {v: '12', label: '12'}, {v: '16', label: '16'}, {v: '20', label: '20'}]}
+        value={String(zone.count ?? RECENT_DEFAULT)}
         onChange={v => update(c => void ((c.zones[i] as any).count = Number(v)))}
       />
       <Text style={ui.subLabel}>Layout</Text>
@@ -1146,12 +1214,14 @@ function newZone(type: Zone['type']): Zone {
   if (type === 'shortcuts') return {type, title: 'Shortcuts', items: []};
   if (type === 'stars') return {type, title: 'Stars', folders: [], noteSort: 'recent'};
   if (type === 'keywords') return {type, title: 'Keywords', folders: [], sort: 'keyword', display: 'list', noteSort: 'recent'};
-  if (type === 'recent') return {type, title: 'Recent', count: RECENT_MAX, display: 'list'};
+  if (type === 'recent') return {type, title: 'Recent', count: RECENT_DEFAULT, display: 'list'};
   if (type === 'clock') return {type, title: 'Clock', style: 'large', hour24: true};
   if (type === 'search') return {type, title: 'Search'};
   if (type === 'status') return {type, title: 'Device', battery: true, storage: true, stats: true};
   if (type === 'nav') return {type, title: 'Files', root: '/storage/emulated/0/Note'};
   if (type === 'clips') return {type, title: 'Clips', folders: [], labels: [], display: 'grid'};
+  if (type === 'todo') return {type, title: 'To-do', folders: [], labels: [], display: 'list'};
+  if (type === 'toc') return {type, title: 'Contents', indentByStyle: false, titleLevels: [1, 2, 3, 4]};
   return {type: 'apps', title: 'Apps', apps: []};
 }
 
@@ -1290,12 +1360,57 @@ const CLOCK_LOCALES: {v: string; label: string}[] = [
 ];
 
 function SearchEditor({i, zone, update, openModal}: EditorProps<'search'>) {
+  const on = !!zone.searchTitles;
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('');
+  const indexNow = async () => {
+    if (busy) return;
+    setBusy(true);
+    setStatus('Indexing…');
+    try {
+      // A fresh walk: loadIndex() can hand back a stale snapshot, and the purge
+      // below deletes cached notes that aren't in this list.
+      const idx = await buildIndex();
+      const notes = idx.entries.filter(e => !e.isDir && /\.note$/i.test(e.name)).map(e => e.path);
+      if (!notes.length) {
+        setStatus('No notes found to index.');
+      } else {
+        const r = await indexTitles(
+          notes,
+          (done, total) => {
+            if (done === total || done % 10 === 0) setStatus(`Indexing ${done}/${total}…`);
+          },
+          !idx.truncated, // a capped walk isn't proof a note is gone
+        );
+        setStatus(`Indexed ${r.titles} titles in ${r.notes} notes.`);
+      }
+    } catch (e: any) {
+      setStatus('Indexing failed' + (e && e.message ? `: ${e.message}` : '') + '.');
+    }
+    setBusy(false);
+  };
   return (
     <View>
       <Text style={ui.subLabel}>
         Searches file &amp; folder names + keywords from scanned notes. Grammar: "phrase" · =exact · a|b · !exclude ·
-        f:folder · kw:only · star: · type:note|pdf|doc|folder · approx:
+        f:folder · kw:only · {on ? 'title:only · ' : ''}star: · type:note|pdf|doc|folder · approx:
       </Text>
+      <Text style={ui.subLabel}>Also search note titles (headings)</Text>
+      <Seg
+        options={[{v: 'off', label: 'Off'}, {v: 'on', label: 'On'}]}
+        value={on ? 'on' : 'off'}
+        onChange={v => update(c => void ((c.zones[i] as any).searchTitles = v === 'on'))}
+      />
+      {on && (
+        <View style={{marginTop: 4}}>
+          <Text style={ui.subLabel}>
+            Titles need a one-time OCR index (headings carry no text). Re-index after adding notes; it is incremental
+            (only changed pages are re-read), so later runs are fast.
+          </Text>
+          <Mini label={busy ? 'Indexing…' : '≣ Index titles now'} onPress={indexNow} />
+          {status ? <Text style={ui.subLabel}>{status}</Text> : null}
+        </View>
+      )}
       <Text style={ui.subLabel}>Scope: folders to include (leave empty to search the whole device)</Text>
       <FoldersEditor i={i} folders={zone.folders ?? []} update={update} openModal={openModal} what="search" />
     </View>
@@ -1346,7 +1461,7 @@ function NavEditor({i, zone, update, openModal}: EditorProps<'nav'>) {
   );
 }
 
-function ClipsEditor({i, zone, update, openModal, ocrGlobal}: EditorProps<'clips'> & {ocrGlobal: boolean}) {
+function ClipsEditor({i, zone, update, openModal, ocrGlobal}: (EditorProps<'clips'> | EditorProps<'todo'>) & {ocrGlobal: boolean}) {
   const [labels, setLabels] = useState<string[]>([]);
   useEffect(() => {
     allClipLabels().then(setLabels).catch(() => {});

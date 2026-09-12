@@ -9,6 +9,7 @@
  */
 import {NativeModules} from 'react-native';
 
+import {RECENT_MAX} from './config';
 import {recentModifiedFiles} from './scanner';
 
 const {DashboardNative} = NativeModules;
@@ -34,7 +35,7 @@ export async function readRecent(): Promise<string[]> {
   }
   // 2) Chauvet: /Recent is unreachable. Show recently-modified notes/docs instead.
   try {
-    const files = await recentModifiedFiles(16);
+    const files = await recentModifiedFiles(RECENT_MAX);
     log(`fallback recently-modified ${files.length}`);
     return files;
   } catch (e: any) {

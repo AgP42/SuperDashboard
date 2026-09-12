@@ -80,15 +80,14 @@ async function strokeBox(e: any): Promise<Box | null> {
   }
 }
 
+/** Release native-side element memory. Concurrent: these are independent bridge
+ *  calls and a page can hold hundreds of strokes. */
+export async function recycleAll(els: any[]): Promise<void> {
+  await Promise.all((els ?? []).map(e => (e && e.recycle ? Promise.resolve(e.recycle()).catch(() => {}) : Promise.resolve())));
+}
+
 async function recycleGeom(g: StarGeom | null): Promise<void> {
-  if (!g) return;
-  for (const e of g.els) {
-    try {
-      e.recycle && (await e.recycle());
-    } catch {
-      /* ignore */
-    }
-  }
+  if (g) await recycleAll(g.els);
 }
 
 /**
@@ -175,8 +174,9 @@ async function readStarGeom(path: string, page0: number): Promise<StarGeom | nul
 }
 
 /** OCR strokes, retrying the transient "Recognition failed (117)" error. '' if
- *  it recognises nothing (the firmware OCR is unreliable; hence 'image' mode). */
-async function recognize(elements: any[], size: any): Promise<string> {
+ *  it recognises nothing (the firmware OCR is unreliable; hence 'image' mode).
+ *  `size` MUST be the full page size: recognizeElements rejects a smaller rect. */
+export async function recognize(elements: any[], size: any): Promise<string> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const raw: any = await PluginCommAPI.recognizeElements(elements, {width: size?.width, height: size?.height});
     if (raw && raw.success) return typeof raw.result === 'string' ? raw.result.replace(/\s+/g, ' ').trim() : '';

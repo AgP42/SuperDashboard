@@ -99,6 +99,17 @@ export const ui = StyleSheet.create({
   // a real tap target for e-ink (the old muted-blue 11px glyphs were too small).
   clipBtn: {fontSize: 14, color: '#000000', fontWeight: '700', borderWidth: 1.5, borderColor: '#000000', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 4, marginRight: 7, marginBottom: 3, overflow: 'hidden'},
   clipDel: {fontSize: 20, color: '#000000', fontWeight: '700', marginLeft: 'auto', paddingHorizontal: 4},
+  // To-do mode. Monochrome by necessity (1-bit e-ink): state reads as fill,
+  // outline and strike-through, never colour.
+  clipCheck: {width: 20, height: 20, borderWidth: 1.5, borderColor: '#000000', borderRadius: 4, alignItems: 'center', justifyContent: 'center', marginRight: 7},
+  clipCheckOn: {width: 20, height: 20, borderWidth: 1.5, borderColor: '#000000', backgroundColor: '#000000', borderRadius: 4, alignItems: 'center', justifyContent: 'center', marginRight: 7},
+  clipCheckMark: {fontSize: 13, lineHeight: 15, color: '#ffffff', fontWeight: '700'},
+  clipDoneText: {textDecorationLine: 'line-through', color: '#8a8a8a'},
+  clipTab: {fontSize: 12, color: '#000000', borderWidth: 1.2, borderColor: '#000000', paddingHorizontal: 11, paddingVertical: 3, marginRight: 6, marginBottom: 4, borderRadius: 999},
+  clipTabOn: {fontSize: 12, color: '#ffffff', backgroundColor: '#000000', borderWidth: 1.2, borderColor: '#000000', paddingHorizontal: 11, paddingVertical: 3, marginRight: 6, marginBottom: 4, borderRadius: 999, overflow: 'hidden'},
+  clipChipAdd: {fontSize: 11, color: '#000000', borderWidth: 1, borderStyle: 'dashed', borderColor: '#000000', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, marginRight: 5, marginBottom: 3},
+  clipStrikeBar: {position: 'absolute', left: '-4%', right: '-4%', top: '50%', height: 2, backgroundColor: '#000000', transform: [{rotate: '-14deg'}]},
+  clipClear: {fontSize: 11.5, color: '#000000', borderWidth: 1, borderColor: '#000000', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 2, marginBottom: 4},
   // Recognized text of an OCR clip, shown in place of the thumbnail.
   clipText: {fontSize: 15, color: '#000000', lineHeight: 20},
   clipTextBox: {borderWidth: 1, borderColor: '#000000', borderRadius: 6, backgroundColor: '#ffffff', padding: 8},
