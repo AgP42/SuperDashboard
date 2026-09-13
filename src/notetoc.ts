@@ -23,11 +23,12 @@ import {PluginFileAPI} from 'sn-plugin-lib';
 
 import {readPageRevs} from './notepage';
 import {cacheDir} from './paths';
+import {notesModifiedSince, NoteFile} from './scanner';
 import {recognize, recycleAll, unwrap} from './starText';
 
 const {DashboardNative} = NativeModules;
 const TOC_FILE = 'toccache.json';
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 3; // bumped so the legacy-style-0 title fix re-reads notes (v2 was polluted with pre-fix results)
 const MAX_PAGES = 400; // safety cap so a runaway note can't scan unbounded
 
 export interface TocEntry {
@@ -53,6 +54,7 @@ interface PageCache {
 interface CacheShape {
   version: number;
   notes: Record<string, {pages: Record<string, PageCache>}>;
+  lastIndexAt?: number; // watermark for the on-open auto-refresh (see autoRefreshTitles)
 }
 let mem: CacheShape | null = null;
 let dirty = false;
@@ -66,7 +68,7 @@ async function loadCache(): Promise<CacheShape> {
     if (text && text.trim()) {
       const obj = JSON.parse(text);
       // Discard a cache written by a different layout rather than mis-reading it.
-      if (obj && obj.notes && obj.version === CACHE_VERSION) mem = {version: CACHE_VERSION, notes: obj.notes};
+      if (obj && obj.notes && obj.version === CACHE_VERSION) mem = {version: CACHE_VERSION, notes: obj.notes, lastIndexAt: obj.lastIndexAt};
     }
   } catch {
     /* none yet */
@@ -102,7 +104,16 @@ function cleanHeading(s: string): string {
 async function readPageTitles(path: string, page0: number): Promise<TocEntry[]> {
   const els: any[] = unwrap<any[]>(await PluginFileAPI.getElements(page0, path)) ?? [];
   try {
-    const titles = els.filter(e => e && e.type === 100 && e.title && e.title.style !== 0);
+    // Keep every real Title. NOTE the API asymmetry: passing style 0 to
+    // setLassoTitle *removes* a title, but style 0 STORED on an element is a
+    // legacy heading (older notes, before multi-style headings) — those must be
+    // shown. We only drop a style-0 title with no ink at all (a stray ghost),
+    // keeping legacy s0 headings, which always carry their strokes.
+    // "has ink" tolerates both shapes the firmware uses for controlTrailNums: a
+    // plain array, or a lazy accessor (truthy, non-array) — so a legacy s0 heading
+    // isn't dropped just because its trail list came back as an accessor.
+    const hasInk = (ct: any) => (Array.isArray(ct) ? ct.length > 0 : !!ct);
+    const titles = els.filter(e => e && e.type === 100 && e.title && (e.title.style !== 0 || hasInk(e.title.controlTrailNums)));
     if (!titles.length) return []; // the common case: no page size, no OCR
     // Map every stroke by its in-page index so a title can grab exactly its own
     // strokes (Title.controlTrailNums are those in-page indices).
@@ -225,6 +236,7 @@ export async function readNoteToc(path: string, flush = true): Promise<{readable
  */
 export async function indexTitles(notePaths: string[], onProgress?: (done: number, total: number) => void, prune = true): Promise<{notes: number; titles: number}> {
   const total = notePaths.length;
+  const t0 = Date.now();
   let titles = 0;
   for (let i = 0; i < total; i++) {
     try {
@@ -235,11 +247,11 @@ export async function indexTitles(notePaths: string[], onProgress?: (done: numbe
     }
     onProgress?.(i + 1, total);
   }
+  const cache = await loadCache();
   // Forget notes that were deleted or renamed, so search can't offer dead pages.
   // Skipped when the caller's note list may be incomplete (a truncated index),
   // which would otherwise purge notes that simply weren't listed.
   if (prune) {
-    const cache = await loadCache();
     const live = new Set(notePaths);
     for (const p of Object.keys(cache.notes)) {
       if (!live.has(p)) {
@@ -248,9 +260,77 @@ export async function indexTitles(notePaths: string[], onProgress?: (done: numbe
       }
     }
   }
+  // A full index IS the watermark: notes edited after it starts are caught by the
+  // next on-open auto-refresh. Use the start time so an edit during indexing isn't missed.
+  cache.lastIndexAt = t0;
+  dirty = true;
   await persist();
   tlog(`indexTitles: ${total} notes, ${titles} titles`);
   return {notes: total, titles};
+}
+
+// Serialise auto-refresh runs: rapid dashboard re-entries must not overlap them.
+let refreshing = false;
+const AUTO_CAP = 8; // notes re-OCR'd per open, kept small so the deferred pass never hogs the device
+
+/**
+ * On-open incremental refresh of the shared title cache (used by BOTH the Contents
+ * block and the title search — one database). Reads only notes modified since the
+ * last run's watermark, so Search stays fresh even when no Contents block is shown
+ * and the user never re-runs the config index. Oldest-first with a per-open cap and
+ * a note-by-note watermark, so an interrupted run resumes instead of restarting.
+ * Best-effort and deferred by the caller — never blocks the dashboard open.
+ */
+export async function autoRefreshTitles(): Promise<{modified: number; done: number; capped: boolean}> {
+  if (refreshing) return {modified: 0, done: 0, capped: false};
+  refreshing = true;
+  try {
+    // NOTE: we do NOT flushCurrentNote() here — saveCurrentNote foregrounds the
+    // editor and makes the dashboard flicker on every open (the v0.20.2
+    // regression, see scanner.ts). A heading just written on the open page is
+    // therefore picked up on the NEXT open (once the editor auto-saves on
+    // page-turn) or immediately via a manual "Refresh all".
+    const cache = await loadCache();
+    const since = cache.lastIndexAt ?? 0;
+    const t0 = Date.now();
+    let modified: NoteFile[] = [];
+    try {
+      modified = await notesModifiedSince(since);
+    } catch {
+      return {modified: 0, done: 0, capped: false};
+    }
+    if (!modified.length) return {modified: 0, done: 0, capped: false};
+    const batch = modified.slice(0, AUTO_CAP);
+    let done = 0;
+    for (const f of batch) {
+      try {
+        await readNoteToc(f.path, false); // incremental per note; persisted in batches below
+      } catch (e: any) {
+        tlog(`autoRefresh ${f.path} failed: ${e && e.message}`);
+      }
+      cache.lastIndexAt = f.mtime; // advance note-by-note so an interrupted run resumes here
+      dirty = true;
+      done++;
+      if (done % 5 === 0) await persist();
+    }
+    const capped = modified.length > batch.length;
+    if (!capped) {
+      // Drained the backlog → jump the watermark to the walk time (not "now": a
+      // note edited DURING this run has mtime > t0 and must be caught next open).
+      cache.lastIndexAt = t0;
+    } else if (modified[batch.length]?.mtime === batch[batch.length - 1].mtime) {
+      // The next unprocessed note shares the last processed note's mtime; a strict
+      // `> mtime` filter would skip it forever, so step the watermark back 1ms to
+      // re-include the whole tie group next open (already-read notes are cache hits).
+      cache.lastIndexAt = batch[batch.length - 1].mtime - 1;
+    }
+    dirty = true;
+    await persist();
+    tlog(`autoRefresh: ${modified.length} modified since ${since}, ${done} read${capped ? ` (capped ${AUTO_CAP}, ${modified.length - batch.length} left)` : ''}`);
+    return {modified: modified.length, done, capped};
+  } finally {
+    refreshing = false;
+  }
 }
 
 /** The titles already in the cache for one note, WITHOUT any footer read or OCR.

@@ -3,7 +3,7 @@
  * Settings surface. See docs/dashboard-spec.md.
  * @format
  */
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {DeviceEventEmitter, NativeModules, ScrollView, Text, View} from 'react-native';
 
 import {getRoute, setRoute, Route} from './src/route';
@@ -12,6 +12,7 @@ import {leavePlugin} from './src/bubble';
 import {tscale, ZoneView} from './src/zones';
 import {ThemedButton, ui} from './src/ui';
 import {SettingsScreen} from './src/settings';
+import {autoRefreshTitles} from './src/notetoc';
 
 const SCALE: Record<string, number> = {S: 1, M: 1.18, L: 1.4, XL: 1.7};
 
@@ -63,6 +64,7 @@ function DashboardScreen(): React.JSX.Element {
   // showing/hiding it is driven by AppState in index.js (the OS-level truth of
   // whether the view is really on screen), so a failed showPluginView can't hide
   // the bubble on a stale layout read anymore.
+  const autoRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     let alive = true;
     const enter = () => {
@@ -78,6 +80,16 @@ function DashboardScreen(): React.JSX.Element {
         if (!alive) return;
         setCfg(c);
         setNonce(n => n + 1);
+        // Keep the shared title cache fresh for Search even when no Contents block
+        // is shown: re-read notes modified since the last watermark. Deferred so it
+        // never blocks the open; runs only when something actually needs titles.
+        const needsTitles = c.zones.some(z => z.type === 'toc' || (z.type === 'search' && (z as any).searchTitles));
+        if (needsTitles) {
+          if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current); // never stack timers across re-entries
+          autoRefreshTimer.current = setTimeout(() => {
+            if (alive) void autoRefreshTitles().catch(() => {});
+          }, 1800);
+        }
       });
     };
     enter();
@@ -87,6 +99,7 @@ function DashboardScreen(): React.JSX.Element {
     return () => {
       alive = false;
       sub.remove();
+      if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current);
     };
   }, []);
 

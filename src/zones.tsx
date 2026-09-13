@@ -18,7 +18,7 @@ import {ClockFace} from './clock';
 import {Clip, listClips, deleteClip, setClipDone, setClipKind, reanchorClip, setClipLabels, allClipLabels, updateClipSource} from './clips';
 import {pasteClip} from './paste';
 import {resolveClipTarget, pageIdAt} from './notepage';
-import {writeTodoCheck, clearTodoCheck, deepFindMark, drawCheckInBox, eraseCheckInBox, untrackTodoMark} from './todomark';
+import {writeTodoCheck, clearTodoCheck, deepFindMark, drawCheckInBox, eraseCheckInBox, untrackTodoMark, normalizeTodoMark} from './todomark';
 
 const {DashboardNative} = NativeModules;
 // Re-entrancy guard for a clip's tap-to-open (its resolve is async and may scan
@@ -548,9 +548,46 @@ function TodoZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type:
         repaintTimer.current = setTimeout(() => setRepaint(r => r + 1), 450);
       })
       .catch(() => {});
+  // Direction 2 (note → dashboard): pull hand-drawn checks on the OPEN note into the
+  // dashboard. MANUAL only (the ↻ on this block, or "Refresh all") — the hand-ink
+  // scan reads every stroke on the page, too costly to run on every open. It is:
+  //  - ADDITIVE: marks a to-do done when a check is detected, NEVER auto-unchecks.
+  //  - NORMALISING: a hand check is replaced by our own ✓, so a later dashboard
+  //    untick can erase it (otherwise the to-do would keep re-checking itself).
+  //  - CURRENT NOTE ONLY: scans just the to-dos on the note being viewed.
+  // flushCurrentNote here is safe: it only runs on an explicit refresh, not on open.
+  const [syncing, setSyncing] = useState(false);
+  const syncFromNotes = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const cur = unwrap<string>(await PluginCommAPI.getCurrentFilePath().catch(() => '')) ?? '';
+      if (!cur) return;
+      const cs = await listClips();
+      const todos = cs.filter(c => c.kind === 'todo' && typeof c.markNum === 'number' && !c.done && c.sourcePath === cur);
+      if (!todos.length) return;
+      await flushCurrentNote([]); // persist a just-drawn hand check to disk first
+      let changed = false;
+      for (const c of todos) {
+        const r = await normalizeTodoMark(c, cur);
+        if (r.found && r.ticked) {
+          await setClipDone(c.id, true);
+          changed = true;
+        }
+      }
+      if (changed) reload();
+    } catch {
+      /* best-effort */
+    } finally {
+      setSyncing(false);
+    }
+  };
   useEffect(() => {
     reload();
-    const sub = DeviceEventEmitter.addListener('dashboard_refresh_all', reload);
+    const sub = DeviceEventEmitter.addListener('dashboard_refresh_all', () => {
+      reload();
+      syncFromNotes(); // "Refresh all" includes the to-do note→dashboard pull
+    });
     return () => {
       sub.remove();
       if (repaintTimer.current) clearTimeout(repaintTimer.current);
@@ -713,8 +750,11 @@ function TodoZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type:
             </TouchableOpacity>
           ))}
           <View style={{flex: 1}} />
+          <TouchableOpacity onPress={syncFromNotes} disabled={syncing}>
+            <Text style={[ui.clipClear, ff]}>{syncing ? '… syncing' : '↻ Check notes'}</Text>
+          </TouchableOpacity>
           {view === 'done' && doneCount > 0 && (
-            <TouchableOpacity onPress={clearDone}>
+            <TouchableOpacity onPress={clearDone} style={{marginLeft: 12}}>
               <Text style={[ui.clipClear, ff]}>🗑 Clear done ({doneCount})</Text>
             </TouchableOpacity>
           )}

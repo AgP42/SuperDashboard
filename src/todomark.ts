@@ -1,6 +1,8 @@
 /**
- * PROBE (read-only): find a to-do's tick-box on its source note, and tell whether
- * the user has ticked it by hand.
+ * A to-do's tick-box on its source note: find it, draw/erase the ✓ (dashboard →
+ * note), and read whether it's ticked (note → dashboard). Together these give a
+ * two-way sync: tick in either place and both agree, with the NOTE as the source
+ * of truth whenever its box is findable.
  *
  * How the mark is identified. Element `uuid` looked like the obvious handle, but a
  * device run showed the firmware re-generates every uuid on each read (the same
@@ -10,8 +12,11 @@
  * text, which is an exact match rather than a guess at a shape, and it survives a
  * move. The square itself is then simply the one nearest that label.
  *
- * Still read-only: writing the tick back onto the note comes once this reports
- * that the box is reliably found and that hand-drawn ink inside it is detectable.
+ * Reading the ticked state (readMarkTicked): a box counts as checked when it holds
+ * either our own drawn ✓ (a straight-line geometry inside it) or hand-drawn ink (a
+ * pen stroke with points inside it). The box outline is a GEO_polygon and its
+ * "raised-button" shadow lines sit outside the square, so neither is mistaken for
+ * a check. Stroke points are EMR (rotated); we convert them with the page size.
  */
 import {NativeModules} from 'react-native';
 import {PluginCommAPI, PluginFileAPI} from 'sn-plugin-lib';
@@ -51,28 +56,163 @@ function boxOfPoints(points: any[]): Box | null {
 
 const centre = (b: Box) => ({x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2});
 
+/** Find the "#N" mark and its box in an ALREADY-fetched element list, so a caller
+ *  that also inspects the box reuses one getElements. null if not there. Reads
+ *  each geometry's points ROBUSTLY (array OR accessor): a plain for..of over an
+ *  accessor yields nothing, which would silently drop the real box and pick a
+ *  wrong 44px square elsewhere on the page. */
+async function findBoxInEls(els: any[], markNum: number): Promise<Box | null> {
+  const tag = `#${markNum}`;
+  const label = els.find(e => e && (e.type === 500 || e.type === 501 || e.type === 502) && e.textBox && (e.textBox.textContentFull ?? '').trim() === tag);
+  if (!label) return null;
+  const lr = label.textBox.textRect;
+  const anchorPt = {x: lr.left, y: (lr.top + lr.bottom) / 2};
+  const cands: Box[] = [];
+  for (const e of els) {
+    if (!e || e.type !== 700) continue;
+    const pts = await samplePoints(e.geometry?.points, 64);
+    const b = boxOfPoints(pts);
+    if (b && Math.abs(b.x2 - b.x1 - BOX_SIDE) <= SIDE_TOL && Math.abs(b.y2 - b.y1 - BOX_SIDE) <= SIDE_TOL) cands.push(b);
+  }
+  if (!cands.length) return null;
+  cands.sort((a, b) => {
+    const ca = centre(a);
+    const cb = centre(b);
+    return Math.hypot(ca.x - anchorPt.x, ca.y - anchorPt.y) - Math.hypot(cb.x - anchorPt.x, cb.y - anchorPt.y);
+  });
+  return cands[0];
+}
+
 /** Find the "#N" mark and its box on ONE specific page. null if not there. */
 async function findMarkOnPage(path: string, page: number, markNum: number): Promise<Box | null> {
   const els: any[] = unwrap<any[]>(await PluginFileAPI.getElements(page, path)) ?? [];
   try {
-    const tag = `#${markNum}`;
-    const label = els.find(e => e && (e.type === 500 || e.type === 501 || e.type === 502) && e.textBox && (e.textBox.textContentFull ?? '').trim() === tag);
-    if (!label) return null;
-    const lr = label.textBox.textRect;
-    const anchorPt = {x: lr.left, y: (lr.top + lr.bottom) / 2};
-    const cands = els
-      .filter(e => e && e.type === 700)
-      .map(g => boxOfPoints(g.geometry?.points))
-      .filter((b): b is Box => !!b && Math.abs(b.x2 - b.x1 - BOX_SIDE) <= SIDE_TOL && Math.abs(b.y2 - b.y1 - BOX_SIDE) <= SIDE_TOL);
-    if (!cands.length) return null;
-    cands.sort((a, b) => {
-      const ca = centre(a);
-      const cb = centre(b);
-      return Math.hypot(ca.x - anchorPt.x, ca.y - anchorPt.y) - Math.hypot(cb.x - anchorPt.x, cb.y - anchorPt.y);
-    });
-    return cands[0];
+    return await findBoxInEls(els, markNum);
   } finally {
     await recycleAll(els);
+  }
+}
+
+/** Sample up to `cap` points from a geometry/stroke point container, which the
+ *  firmware exposes EITHER as a plain array OR as a lazy ElementDataAccessor
+ *  (size()/getRange()). Old notes mix both, so we must not assume `.some`/`.map`
+ *  exist on it — that was crashing the read with "undefined is not a function". */
+async function samplePoints(container: any, cap: number): Promise<any[]> {
+  try {
+    if (!container) return [];
+    if (Array.isArray(container)) return container.slice(0, cap);
+    if (typeof container.size === 'function' && typeof container.getRange === 'function') {
+      const n = await container.size();
+      if (!n) return [];
+      return (await container.getRange(0, Math.min(n, cap))) ?? [];
+    }
+  } catch {
+    /* fall through */
+  }
+  return [];
+}
+
+/** Inspect a box: does it hold OUR drawn ✓ (a straight-line geometry inside), and
+ *  which pen strokes (type 0) form a hand-drawn check inside it (their numInPage,
+ *  for normalisation)? The stroke pass reads points off EVERY stroke on the page
+ *  (two native calls each) so it runs ONLY when a pageSize is given (the caller
+ *  passes one only for the note being viewed, on an explicit refresh). Strokes are
+ *  EMR — rotated 90° (element x = vertical, y = horizontal) with the horizontal axis
+ *  flipped — and the EMR extent is carried per-element as maxX/maxY; converting with
+ *  THOSE (not PointUtils' 8.45 assumption) stays correct on non-standard pages. */
+async function inspectBox(els: any[], box: Box, pageSize: any): Promise<{ourCheck: boolean; handNums: number[]}> {
+  const inset = 4;
+  const inside = (x: number, y: number) => x > box.x1 + inset && x < box.x2 - inset && y > box.y1 + inset && y < box.y2 - inset;
+  let ourCheck = false;
+  for (const e of els) {
+    if (!e || e.type !== 700 || e.geometry?.type !== 'straightLine') continue;
+    const pts = await samplePoints(e.geometry.points, 16);
+    if (pts.some((p: any) => p && inside(p.x, p.y))) {
+      ourCheck = true;
+      break;
+    }
+  }
+  const handNums: number[] = [];
+  const W = pageSize?.width || 0;
+  const H = pageSize?.height || 0;
+  if (W && H) {
+    for (const e of els) {
+      if (!e || e.type !== 0 || typeof e.numInPage !== 'number') continue;
+      const maxX = e.maxX || 0;
+      const maxY = e.maxY || 0;
+      if (!maxX || !maxY) continue;
+      const pts = await samplePoints(e.stroke?.points, 24);
+      if (!pts.length) continue;
+      let hitn = 0;
+      for (const p of pts) {
+        const px = W - (p.y / maxY) * W;
+        const py = (p.x / maxX) * H;
+        if (inside(px, py)) hitn++;
+      }
+      // A check drawn inside this tiny box has MOST of its points inside; a stroke
+      // merely passing nearby has few → require a majority so normalisation never
+      // deletes adjacent handwriting.
+      if (hitn >= 2 && hitn * 2 >= pts.length) handNums.push(e.numInPage);
+    }
+  }
+  return {ourCheck, handNums};
+}
+
+/** Page size in pixels, preferring the UNGATED getPageDisplaySize for the current
+ *  file (getPageSize is FILE:READ-gated on Chauvet 3.29.43+ and can silently return
+ *  an unusable size — which breaks the EMR→pixel conversion for hand-ink). Page
+ *  sizes are uniform within a note, so the displayed page's size stands in. */
+async function pageSizeOf(path: string, page: number): Promise<any> {
+  try {
+    const cur = unwrap<string>(await PluginCommAPI.getCurrentFilePath().catch(() => ''));
+    const gpds = (PluginCommAPI as any).getPageDisplaySize;
+    if (cur === path && typeof gpds === 'function') {
+      const d = unwrap<any>(await gpds.call(PluginCommAPI).catch(() => null));
+      if (d && d.width && d.height) return d;
+    }
+  } catch {
+    /* fall through to the gated call */
+  }
+  return unwrap<any>(await PluginFileAPI.getPageSize(path, page));
+}
+
+/**
+ * DIRECTION 2 (note → dashboard), on an explicit refresh: is the to-do's box
+ * checked, and if the user checked it BY HAND, replace that ink with our own ✓ so
+ * the dashboard can later untick it (erasing hand ink is otherwise impossible, so
+ * the to-do would keep re-checking itself). The erase+redraw runs ONLY when the box
+ * is on the currently-viewed page, where insertGeometry places the ✓ correctly and
+ * the hand ink can be hit-tested reliably. Additive by design: it reports
+ * ticked:true when checked, never asks the caller to untick. found:false when the
+ * box isn't on the expected page. The per-stroke scan is why this is refresh-only,
+ * not run on every open.
+ */
+export async function normalizeTodoMark(clip: Clip, currentPath: string): Promise<{found: boolean; ticked: boolean}> {
+  if (typeof clip.markNum !== 'number') return {found: false, ticked: false};
+  try {
+    const t = await resolveClipTarget(clip.sourcePath, clip.sourcePageId, clip.sourcePage);
+    const onCurrent = t.path === currentPath;
+    const els: any[] = unwrap<any[]>(await PluginFileAPI.getElements(t.page, t.path)) ?? [];
+    try {
+      const box = await findBoxInEls(els, clip.markNum);
+      if (!box) return {found: false, ticked: false};
+      const size = onCurrent ? await pageSizeOf(t.path, t.page) : null; // stroke scan only on the open note
+      const {ourCheck, handNums} = await inspectBox(els, box, size);
+      if (ourCheck) return {found: true, ticked: true};
+      if (onCurrent && handNums.length) {
+        // Normalise the hand check: delete the ink, draw our own ✓ (erasable later).
+        await PluginFileAPI.deleteElements(t.path, t.page, handNums.slice().sort((a, b) => b - a)).catch(() => {});
+        const drawn = await drawCheckInBox(t.path, t.page, box, true);
+        mlog(`${clip.id}: normalised hand-check (${handNums.length} stroke(s) → ✓) drawn=${drawn}`);
+        return {found: true, ticked: true};
+      }
+      return {found: true, ticked: false};
+    } finally {
+      await recycleAll(els);
+    }
+  } catch (e: any) {
+    mlog(`${clip.id}: normalizeTodoMark failed: ${e && e.message}`);
+    return {found: false, ticked: false};
   }
 }
 
@@ -145,8 +285,15 @@ export async function deepFindMark(
   return null;
 }
 
-/** Draw the ✓ (two straight lines) inside a box on a given file+page. */
-export async function drawCheckInBox(path: string, page: number, box: Box): Promise<boolean> {
+/**
+ * Draw the ✓ (two straight lines) inside a box on a given file+page.
+ * `onCurrentPage`: the box is on the note's currently-displayed page, so we can
+ * use PluginCommAPI.insertGeometry — the SAME pixel-coordinate API the capture
+ * used to draw the box, which places correctly on ANY page size. The file-level
+ * insertElements path (used when the target page isn't displayed) mis-scales the
+ * coordinates on non-standard page sizes, so it stays a best-effort fallback.
+ */
+export async function drawCheckInBox(path: string, page: number, box: Box, onCurrentPage = false): Promise<boolean> {
   const w = box.x2 - box.x1;
   const h = box.y2 - box.y1;
   const pts = [
@@ -154,8 +301,11 @@ export async function drawCheckInBox(path: string, page: number, box: Box): Prom
     [box.x1 + w * 0.42, box.y1 + h * 0.8],
     [box.x1 + w * 0.82, box.y1 + h * 0.2],
   ];
-  const ok1 = await insertGeoLine(path, page, pts[0][0], pts[0][1], pts[1][0], pts[1][1]);
-  const ok2 = await insertGeoLine(path, page, pts[1][0], pts[1][1], pts[2][0], pts[2][1]);
+  const line = onCurrentPage
+    ? (a: number, b: number, c: number, d: number) => insertGeoLineHere(a, b, c, d)
+    : (a: number, b: number, c: number, d: number) => insertGeoLine(path, page, a, b, c, d);
+  const ok1 = await line(pts[0][0], pts[0][1], pts[1][0], pts[1][1]);
+  const ok2 = await line(pts[1][0], pts[1][1], pts[2][0], pts[2][1]);
   return ok1 && ok2; // both strokes, or it's only half a tick
 }
 
@@ -171,8 +321,13 @@ export async function writeTodoCheck(clip: Clip): Promise<boolean> {
       return false;
     }
     const {path, page, box} = found;
-    const ok = await drawCheckInBox(path, page, box);
-    mlog(`${clip.id}: tick on note page ${page}: ok=${ok} box=[${Math.round(box.x1)},${Math.round(box.y1)},${Math.round(box.x2)},${Math.round(box.y2)}]`);
+    // Prefer insertGeometry (page-size-correct pixels) when the box is on the
+    // note's displayed page — the common case when ticking from the dashboard.
+    const curPath = unwrap<string>(await PluginCommAPI.getCurrentFilePath().catch(() => '')) ?? '';
+    const curPage = unwrap<number>(await PluginCommAPI.getCurrentPageNum().catch(() => -1)) ?? -1;
+    const onCurrent = curPath === path && curPage === page;
+    const ok = await drawCheckInBox(path, page, box, onCurrent);
+    mlog(`${clip.id}: tick on note page ${page} (${onCurrent ? 'insertGeometry' : 'insertElements'}): ok=${ok} box=[${Math.round(box.x1)},${Math.round(box.y1)},${Math.round(box.x2)},${Math.round(box.y2)}]`);
     return ok;
   } catch (e: any) {
     mlog(`${clip.id}: writeTodoCheck failed: ${e && e.message}`);
@@ -195,9 +350,9 @@ export async function eraseCheckInBox(path: string, page: number, box: Box): Pro
     const inside = (pt: any) => pt && pt.x > box.x1 + inset && pt.x < box.x2 - inset && pt.y > box.y1 + inset && pt.y < box.y2 - inset;
     const nums: number[] = [];
     for (const e of els) {
-      if (!e || e.type !== 700 || e.geometry?.type !== 'straightLine') continue;
-      const pts: any[] = e.geometry.points ?? [];
-      if (pts.length >= 2 && pts.every(inside) && typeof e.numInPage === 'number') nums.push(e.numInPage);
+      if (!e || e.type !== 700 || e.geometry?.type !== 'straightLine' || typeof e.numInPage !== 'number') continue;
+      const pts = await samplePoints(e.geometry.points, 8); // array OR accessor (see samplePoints)
+      if (pts.length >= 2 && pts.every(inside)) nums.push(e.numInPage);
     }
     if (!nums.length) return true; // nothing drawn — not a failure
     nums.sort((a, b) => b - a); // delete highest index first
@@ -251,6 +406,28 @@ export async function untrackTodoMark(clip: Clip): Promise<void> {
     }
   } catch (e: any) {
     mlog(`${clip.id}: untrackTodoMark failed: ${e && e.message}`);
+  }
+}
+
+/** Insert one straight line on the CURRENT page via insertGeometry — pixel coords,
+ *  page-size-correct (the same API the capture used for the box). */
+async function insertGeoLineHere(x1: number, y1: number, x2: number, y2: number): Promise<boolean> {
+  try {
+    const r: any = await PluginCommAPI.insertGeometry({
+      penColor: 0x00,
+      penType: 10,
+      penWidth: 300,
+      type: 'straightLine',
+      points: [
+        {x: x1, y: y1},
+        {x: x2, y: y2},
+      ],
+      showLassoAfterInsert: false,
+    });
+    return r === true || !!(r && r.success);
+  } catch (e: any) {
+    mlog(`insertGeoLineHere threw: ${e && e.message}`);
+    return false;
   }
 }
 

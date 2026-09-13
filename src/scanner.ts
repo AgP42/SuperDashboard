@@ -502,6 +502,15 @@ export async function recentModifiedFiles(limit: number): Promise<string[]> {
   return files.slice(0, limit);
 }
 
+/** Note files (path + mtime) modified strictly after `since`, OLDEST-first, over
+ *  the whole device. Reuses the shared walk cache (free when Stars/Keywords have
+ *  already walked the same scope). Drives the title index's auto-refresh: the
+ *  caller re-reads only these notes and advances its watermark through them. */
+export async function notesModifiedSince(since: number): Promise<NoteFile[]> {
+  const {files} = await collectNotes([]);
+  return files.filter(f => f.mtime > since).sort((a, b) => a.mtime - b.mtime);
+}
+
 export function basename(path: string): string {
   return path.substring(path.lastIndexOf('/') + 1);
 }
