@@ -18,7 +18,7 @@ import {ClockFace} from './clock';
 import {Clip, listClips, deleteClip, setClipDone, setClipKind, reanchorClip, setClipLabels, allClipLabels, updateClipSource} from './clips';
 import {pasteClip} from './paste';
 import {resolveClipTarget, pageIdAt} from './notepage';
-import {writeTodoCheck, clearTodoCheck, deepFindMark, drawCheckInBox, eraseCheckInBox} from './todomark';
+import {writeTodoCheck, clearTodoCheck, deepFindMark, drawCheckInBox, eraseCheckInBox, eraseTodoMark} from './todomark';
 
 const {DashboardNative} = NativeModules;
 // Re-entrancy guard for a clip's tap-to-open (its resolve is async and may scan
@@ -664,16 +664,20 @@ function TodoZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type:
     reload();
   };
   const del = async (id: string) => {
-    const ok = await NativeUIUtils.showRattaDialog('Delete this to-do?', 'Cancel', 'Delete', false).catch(() => false);
-    if (ok) {
-      await deleteClip(id);
-      reload();
-    }
+    const ok = await NativeUIUtils.showRattaDialog('Delete this to-do? Its mark on the note is removed too.', 'Cancel', 'Delete', false).catch(() => false);
+    if (!ok) return;
+    const c = clips.find(x => x.id === id);
+    if (c && typeof c.markNum === 'number') await eraseTodoMark(c).catch(() => {});
+    await deleteClip(id);
+    reload();
   };
   const clearDone = async () => {
     const ok = await NativeUIUtils.showRattaDialog(`Delete ${doneCount} finished to-do${doneCount > 1 ? 's' : ''}?`, 'Cancel', 'Delete', false).catch(() => false);
     if (!ok) return;
-    for (const c of sorted.filter(x => x.done)) await deleteClip(c.id);
+    for (const c of sorted.filter(x => x.done)) {
+      if (typeof c.markNum === 'number') await eraseTodoMark(c).catch(() => {});
+      await deleteClip(c.id);
+    }
     reload();
   };
   const saveLabels = async (id: string, next: string[]) => {

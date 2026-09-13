@@ -156,7 +156,7 @@ export async function drawCheckInBox(path: string, page: number, box: Box): Prom
   ];
   const ok1 = await insertGeoLine(path, page, pts[0][0], pts[0][1], pts[1][0], pts[1][1]);
   const ok2 = await insertGeoLine(path, page, pts[1][0], pts[1][1], pts[2][0], pts[2][1]);
-  return ok1 || ok2;
+  return ok1 && ok2; // both strokes, or it's only half a tick
 }
 
 /**
@@ -221,6 +221,58 @@ export async function clearTodoCheck(clip: Clip): Promise<boolean> {
   } catch (e: any) {
     mlog(`${clip.id}: clearTodoCheck failed: ${e && e.message}`);
     return false;
+  }
+}
+
+/**
+ * Remove EVERYTHING we drew for a to-do's mark from its source note: the "#N"
+ * label, the tick-box, its shadow lines, any check strokes, and the outer frame.
+ * Best-effort, on explicit delete. Identifies the cluster by the "#N" label and
+ * geometry near the box / a large polygon anchored at the box centre; leaves the
+ * user's own ink alone. Only searches the recorded source page (no deep scan).
+ */
+export async function eraseTodoMark(clip: Clip): Promise<void> {
+  try {
+    if (typeof clip.markNum !== 'number') return;
+    const found = await findTodoBox(clip);
+    if (!found) {
+      mlog(`${clip.id}: erase skipped (mark #${clip.markNum} not on its page)`);
+      return;
+    }
+    const {path, page, box} = found;
+    const tag = `#${clip.markNum}`;
+    const bc = centre(box);
+    const els: any[] = unwrap<any[]>(await PluginFileAPI.getElements(page, path)) ?? [];
+    try {
+      const nums: number[] = [];
+      for (const e of els) {
+        if (!e || typeof e.numInPage !== 'number') continue;
+        if ((e.type === 500 || e.type === 501 || e.type === 502) && e.textBox && (e.textBox.textContentFull ?? '').trim() === tag) {
+          nums.push(e.numInPage);
+          continue;
+        }
+        if (e.type === 700 && e.geometry) {
+          const b = boxOfPoints(e.geometry.points);
+          if (!b) continue;
+          const near = b.x1 > box.x1 - 20 && b.x2 < box.x2 + 20 && b.y1 > box.y1 - 20 && b.y2 < box.y2 + 20;
+          // Outer frame: a polygon whose top-left corner sits on the box centre
+          // (that's where the frame's corner was drawn) and clearly bigger than it.
+          const frame = Math.abs(b.x1 - bc.x) < BOX_SIDE && Math.abs(b.y1 - bc.y) < BOX_SIDE && (b.x2 - b.x1 > BOX_SIDE * 2 || b.y2 - b.y1 > BOX_SIDE * 2);
+          if (near || frame) nums.push(e.numInPage);
+        }
+      }
+      if (!nums.length) {
+        mlog(`${clip.id}: erase found nothing to remove`);
+        return;
+      }
+      nums.sort((a, b) => b - a);
+      const r: any = await PluginFileAPI.deleteElements(path, page, nums);
+      mlog(`${clip.id}: erased ${nums.length} mark element(s) ok=${r === true || !!(r && r.success)}`);
+    } finally {
+      await recycleAll(els);
+    }
+  } catch (e: any) {
+    mlog(`${clip.id}: eraseTodoMark failed: ${e && e.message}`);
   }
 }
 

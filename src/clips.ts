@@ -41,6 +41,9 @@ export interface Clip {
 }
 
 let mem: Clip[] | null = null;
+// Monotonic #N counter: persisted and only ever increased, so a deleted to-do's
+// number is never reused (a stale '#N' still inked on a note can't be re-matched).
+let markSeq = 0;
 
 function isClip(c: any): c is Clip {
   return c && typeof c.id === 'string' && typeof c.png === 'string' && typeof c.sourcePath === 'string';
@@ -54,6 +57,7 @@ async function load(): Promise<Clip[]> {
     const text: string = await DashboardNative.readTextFile(dir + CLIPS_FILE);
     if (text && text.trim()) {
       const obj = JSON.parse(text);
+      if (typeof obj.markSeq === 'number') markSeq = obj.markSeq;
       mem = (obj.clips ?? []).filter(isClip).map((c: any) => ({
         ...c,
         labels: Array.isArray(c.labels) ? c.labels : [],
@@ -71,7 +75,7 @@ async function load(): Promise<Clip[]> {
 async function persist(): Promise<void> {
   try {
     const dir = await cacheDir();
-    await DashboardNative.writeFile(dir + CLIPS_FILE, JSON.stringify({version: 1, clips: mem ?? []}));
+    await DashboardNative.writeFile(dir + CLIPS_FILE, JSON.stringify({version: 1, markSeq, clips: mem ?? []}));
   } catch {
     /* best-effort */
   }
@@ -206,9 +210,12 @@ export async function allClipLabels(): Promise<string[]> {
  *  on the note, so it has to stay short. */
 export async function nextMarkNum(): Promise<number> {
   const arr = await load();
-  let max = 0;
-  for (const c of arr) if (typeof c.markNum === 'number' && c.markNum > max) max = c.markNum;
-  return max + 1;
+  // Guard against a hand-edited file / pre-counter data: never below any existing.
+  let maxExisting = 0;
+  for (const c of arr) if (typeof c.markNum === 'number' && c.markNum > maxExisting) maxExisting = c.markNum;
+  markSeq = Math.max(markSeq, maxExisting) + 1;
+  await persist();
+  return markSeq;
 }
 
 /** A short, reasonably unique id (device code; Date/Math are fine here). */

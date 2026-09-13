@@ -204,42 +204,50 @@ async function drawGeoLine(penColor, x1, y1, x2, y2, penWidth) {
  * stable handle on the mark even after the user moves it — position is not.
  */
 async function drawClipFrame(rect, style, kind, markNum) {
-  const penColor = FRAME_PEN[style];
-  if (penColor == null || !rect) return null;
+  if (!rect) return null;
+  const outerColor = FRAME_PEN[style]; // undefined when style === 'off'
   try {
-    await drawGeoBox(penColor, rect.left, rect.top, rect.right, rect.bottom);
+    // Outer rectangle around the captured area, only when a frame style is set.
+    if (outerColor != null) await drawGeoBox(outerColor, rect.left, rect.top, rect.right, rect.bottom);
     if (kind !== 'todo') return null;
-    // The tick-box: a fixed-size square straddling the frame's top-left corner,
-    // with a heavier right and bottom edge so it reads as a raised button. The
-    // shadow is not decoration: it makes the symbol one you would not draw by
-    // hand by accident, so a hand-drawn square is never mistaken for this.
+    // A to-do ALWAYS gets its tick-box + "#N" — that pair IS the note<->dashboard
+    // handle, independent of the clip-frame preference. Use black if no frame color.
+    const penColor = outerColor != null ? outerColor : FRAME_PEN.black;
     const side = TODO_BOX_SIDE;
-    const box = {left: rect.left - side / 2, top: rect.top - side / 2, right: rect.left + side / 2, bottom: rect.top + side / 2};
+    const m = 4;
+    // Clamp the box center on-page: near the top-left edge rect.left/top can be
+    // < side/2, which would push the box (and label) to negative coords.
+    const cx = Math.max(side / 2 + m, rect.left);
+    const cy = Math.max(side / 2 + m, rect.top);
+    const box = {left: cx - side / 2, top: cy - side / 2, right: cx + side / 2, bottom: cy + side / 2};
     await drawGeoBox(penColor, box.left, box.top, box.right, box.bottom);
-    const off = 4;
+    const off = 4; // heavier right+bottom edge = a "raised button" not drawn by hand
     await drawGeoLine(penColor, box.right + off, box.top + off, box.right + off, box.bottom + off, 600);
     await drawGeoLine(penColor, box.left + off, box.bottom + off, box.right + off, box.bottom + off, 600);
-    // "#N" printed just right of the box, sitting on the frame's top edge. This
-    // is the durable handle: element uuids are regenerated on every read, but a
-    // text box can be found again by its own text, wherever it ends up.
-    if (typeof markNum === 'number') {
-      const fs = 28;
-      const h = Math.round(fs * (5 / 3));
-      const left = box.right + 10;
-      const top = Math.round(rect.top - h / 2);
-      try {
-        await PluginNoteAPI.insertText({
-          textContentFull: `#${markNum}`,
-          textRect: {left, top, right: left + 110, bottom: top + h},
-          fontSize: fs,
-          textAlign: 0,
-          textFrameWidthType: 0,
-          textFrameStyle: 0,
-          textEditable: 0,
-        });
-      } catch (e) {
-        blog(`[clip] mark label failed: ${e && e.message}`);
+    // "#N" label — the durable handle (uuids are regenerated on every read). If it
+    // fails to insert, the to-do would have no findable handle, so report failure
+    // (return null) rather than store a mark we can never locate again.
+    const fs = 28;
+    const h = Math.round(fs * (5 / 3));
+    const left = box.right + 10;
+    const top = Math.max(m, Math.round(cy - h / 2));
+    try {
+      const r = await PluginNoteAPI.insertText({
+        textContentFull: `#${markNum}`,
+        textRect: {left, top, right: left + 110, bottom: top + h},
+        fontSize: fs,
+        textAlign: 0,
+        textFrameWidthType: 0,
+        textFrameStyle: 0,
+        textEditable: 0,
+      });
+      if (!(r && r.success)) {
+        blog(`[clip] mark label insert not ok`);
+        return null;
       }
+    } catch (e) {
+      blog(`[clip] mark label failed: ${e && e.message}`);
+      return null;
     }
     return box;
   } catch (e) {
@@ -247,7 +255,6 @@ async function drawClipFrame(rect, style, kind, markNum) {
     return null;
   }
 }
-
 /** Save the current lasso selection as an image clip, backlinked to its page.
  *  Headless: no plugin view is opened (frictionless collection). */
 async function handleLassoToClip(kind) {
@@ -357,8 +364,14 @@ async function handleLassoToClip(kind) {
       await DashboardNative?.pruneMatching?.(dir, `clip_${id}.sticker`, '');
     } catch {}
 
-    const markNum = kind === 'todo' && frame !== 'off' && rect ? await nextMarkNum() : undefined;
-    const boxRect = frame !== 'off' && rect ? await drawClipFrame(rect, frame, kind, markNum) : null;
+    // A to-do always gets a mark (its note<->dashboard handle), whatever the
+    // clip-frame setting; a plain clip only gets the frame when the user enabled it.
+    const frameStyle = kind === 'todo' && frame === 'off' ? 'grey' : frame;
+    const markNum = kind === 'todo' && rect ? await nextMarkNum() : undefined;
+    const boxRect = rect && (kind === 'todo' || frame !== 'off') ? await drawClipFrame(rect, frameStyle, kind, markNum) : null;
+    // If the mark couldn't be drawn (e.g. label insert failed), don't persist a
+    // dangling markNum with no handle on the page.
+    const savedMarkNum = boxRect ? markNum : undefined;
     try {
       await PluginCommAPI.setLassoBoxState(2); // dismiss the lasso (keeps the handwriting)
     } catch (e) {
@@ -381,7 +394,7 @@ async function handleLassoToClip(kind) {
       kind,
       ...(kind === 'todo' ? {done: false} : {}),
       ...(boxRect ? {boxRect} : {}),
-      ...(typeof markNum === 'number' ? {markNum} : {}),
+      ...(typeof savedMarkNum === 'number' ? {markNum: savedMarkNum} : {}),
       createdAt: Date.now(),
     });
     blog(`[clip] added ${kind} ${id} from ${path} p.${page}${autoLabels.length ? ` labels="${autoLabels.join(', ')}"` : ''}`);

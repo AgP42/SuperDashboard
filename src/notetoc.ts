@@ -160,15 +160,20 @@ export async function readNoteToc(path: string, flush = true): Promise<{readable
   if (!path || !/\.note$/i.test(path)) return {readable: false, titles: []};
   const cache = await loadCache();
   const revs = await readPageRevs(path);
-  // No readable footer (rare): fall back to a full, uncached pass over the note
-  // by pretending every page is new — same loop, no second code path.
-  let pages: {page: number; rev: string | null}[];
+  // Every page gets a rev so the result is always cacheable. A readable footer
+  // gives a per-page rev (real incremental). Without one (rare), we fall back to
+  // a coarse whole-note fingerprint `nf:<pageCount>`, identical for every page:
+  // unchanged notes then hit the cache instead of re-OCR'ing on every open. The
+  // trade-off is that a footer-less note edited WITHOUT changing its page count
+  // won't refresh — acceptable for that rare case, and far better than a
+  // multi-second re-OCR every time.
+  let pages: {page: number; rev: string}[];
   if (revs && revs.length) {
     pages = revs;
   } else {
     const total = unwrap<number>(await PluginFileAPI.getNoteTotalPageNum(path)) ?? 0;
-    pages = Array.from({length: total}, (_, p) => ({page: p, rev: null}));
-    tlog(`no footer for ${path}; full read of ${total} pages`);
+    pages = Array.from({length: total}, (_, p) => ({page: p, rev: `nf:${total}`}));
+    tlog(`no footer for ${path}; coarse-cached over ${total} pages`);
   }
 
   const prev = cache.notes[path]?.pages ?? {};
@@ -182,7 +187,7 @@ export async function readNoteToc(path: string, flush = true): Promise<{readable
       continue;
     }
     const key = String(page);
-    const cached = rev !== null ? prev[key] : undefined;
+    const cached = prev[key];
     if (cached && cached.rev === rev) {
       next[key] = cached; // unchanged page → reuse, no OCR
       titles.push(...cached.titles);
@@ -196,19 +201,16 @@ export async function readNoteToc(path: string, flush = true): Promise<{readable
       ok = false;
       tlog(`page ${page} failed: ${e && e.message}`);
     }
-    if (rev !== null && ok) next[key] = {rev, titles: pageTitles};
+    if (ok) next[key] = {rev, titles: pageTitles}; // only cache a page we read cleanly
     titles.push(...pageTitles);
     ocrPages++;
   }
   if (capped) tlog(`capped: ${capped} pages beyond ${MAX_PAGES} skipped for ${path}`);
-  if (revs && revs.length) {
-    // Only cache when the pages are keyed by a real rev (the fallback path isn't).
-    const changed = ocrPages > 0 || Object.keys(prev).length !== Object.keys(next).length;
-    if (changed) {
-      cache.notes[path] = {pages: next};
-      dirty = true;
-      if (flush) await persist();
-    }
+  const changed = ocrPages > 0 || Object.keys(prev).length !== Object.keys(next).length;
+  if (changed) {
+    cache.notes[path] = {pages: next};
+    dirty = true;
+    if (flush) await persist();
   }
   tlog(`toc ${path}: ${titles.length} titles, re-read ${ocrPages}/${pages.length} pages`);
   return {readable: true, titles};
