@@ -10,6 +10,33 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## Unreleased
+
+### New
+- **To-dos.** A dedicated **To-do** block, plus a second lasso button **"Dashboard To-do"** (the clip
+  button is now **"Dashboard Clip"**). Lasso a task in a note and it's captured with a **tick-box** and a
+  **"#N"** tag drawn on the note. Check it **in the dashboard** and the ✓ is drawn on the note; check it
+  **by hand** on the note and, on **↻ Check notes** / **Refresh all**, the dashboard picks it up
+  (replacing your mark with its own so it can be cleared again). Open / Done tabs, grouping by note,
+  label filters, and **Clear done**; finished tasks are kept and don't count against the 200 cap. If a
+  marked area is cut to another page or note, an on-demand search finds its "#N" again.
+- **Contents block.** An outline of the **current note's headings**; tap one to jump to its page. Titles
+  are OCR'd once and cached per page (unchanged notes are instant; only edited pages are re-read).
+  Converted (typewritten) titles and headings from older notes are included.
+- **Search note titles.** The Search block can also match note headings (`title:`), sharing the Contents
+  index. Enable it per block; notes you change are re-indexed when you open the dashboard.
+- **More Recent items.** The Recent block now offers **4 / 8 / 12 / 16 / 20** (was 3 / 5 / 8).
+
+### Improved
+- **Settings "Look" page** is grouped into collapsible cards (Layout & theme, Text & font, Note capture,
+  Scanning) instead of one long list.
+- **Faster dashboard open**: the Contents outline loads after the other blocks and only re-reads pages
+  you changed.
+- The handwriting-clip **twin paste** (which stops a lone pasted image from shrinking as you move it) is
+  now always on; it's a fix, so it's no longer a setting.
+
+---
+
 ## v1.8.21 — 2026-09-09
 
 ### Improved

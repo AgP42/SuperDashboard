@@ -50,11 +50,13 @@ On the plugin‑preview firmware SuperDashboard declares two **plugin permission
 ![About this plugin, in device Settings](docs/img/about.png)
 
 - **`plugin.permission.FILE:READ`**: read your notes and folders. Needed to scan for **stars &
-  keywords**, build the **name‑search index**, read the **Recent** list, browse folders in the
-  **Navigation** block, **capture Note Clips** by lasso, and load your **saved configuration**.
+  keywords**, build the **name‑search index**, index **note headings** (Contents / title search), read
+  the **Recent** list, browse folders in the **Navigation** block, **capture Note Clips and To-dos** by
+  lasso, and load your **saved configuration**.
 - **`plugin.permission.FILE:WRITE`**: write files. Needed to **save your configuration/profiles**, to
-  **paste a clip (image + backlink) into a note**, to **delete a star** from a note, and (only when you
-  turn it on) to **draw the clip frame** on a note.
+  **paste a clip (image + backlink) into a note**, to **mark a To-do** on a note (tick-box + "#N") and
+  **draw/erase its check**, to **delete a star** from a note, and (only when you turn it on) to **draw
+  the clip frame** on a note.
 
 Why they're required: the Chauvet firmware enforces file access even on raw `java.io` reads of shared
 storage; without `FILE:READ` the scans and the config read fail silently. If you **decline**, the
@@ -76,12 +78,13 @@ the app‑query permission (to list & launch apps for the Apps zone).
 
 ## Configuration
 
-The **Look** step picks the column count (1/2/3), the vertical flow (masonry / fixed height), one of
-**9 designs** (ledger, boxed, airy, grid black, grid grey, compact, card, minimal, underline), the
-bubble, text & heading sizes, the **font** (System default or any `.ttf`/`.otf` you drop into
-`MyStyle/fonts`), whether block type icons show, the Note‑Clips frame, and the scan policy. The
-**Sections** step is a per‑column canvas with a live preview: **＋ add block** picks a type, ▲▼ reorder,
-◀▶ move between columns, **🔧** configures a block inline, ✕ removes it.
+The **Look** step is organised into collapsible cards: **Layout & theme** (column count 1/2/3, vertical
+flow masonry / fixed height, one of **9 designs** (ledger, boxed, airy, grid black, grid grey, compact,
+card, minimal, underline), the bubble), **Text & font** (text & heading sizes, the **font**: System
+default or any `.ttf`/`.otf` you drop into `MyStyle/fonts`, block type icons), **Note capture** (the
+clip frame, backlink, handwriting / OCR text and its font & size), and **Scanning** (the scan policy).
+The **Sections** step is a per‑column canvas with a live preview: **＋ add block** picks a type, ▲▼
+reorder, ◀▶ move between columns, **🔧** configures a block inline, ✕ removes it.
 
 | Look | Sections |
 |---|---|
@@ -112,12 +115,14 @@ title (▾/▸), and the block's type icon can be shown or hidden on the title.
   grid / inline).
 - **Files**: a small in‑dashboard file browser: walk your folders and open a note/document without
   leaving the dashboard.
-- **Search**: type to find files, folders and keywords across your notes (small query grammar, see
-  below).
+- **Search**: type to find files, folders, keywords and note **headings** across your notes (small
+  query grammar, see below).
+- **Contents**: the current note's **headings** as a tappable outline; tap one to jump to its page
+  (see below).
 - **Recent**: on the stable firmware, the device's recently‑**opened** notes & PDFs, read live from
-  `/Recent/Recent.txt` (device caps it at 8). On Chauvet 3.29.43 / 2.26.40 and later that file is
-  outside the permission sandbox, so Recent falls back to the recently‑**modified** notes/documents
-  under `/Note` + `/Document` (newest first, cached).
+  `/Recent/Recent.txt`. On Chauvet 3.29.43 / 2.26.40 and later that file is outside the permission
+  sandbox, so Recent falls back to the recently‑**modified** notes/documents under `/Note` +
+  `/Document` (newest first, cached). You choose how many to show (**4 / 8 / 12 / 16 / 20**).
 - **Stars**: five‑star pages from the scan, grouped by note; optional per‑star **line preview**
   (handwriting image, or text: typewritten lines read directly, handwriting OCR'd, image fallback);
   delete a single star (`✕★`).
@@ -127,6 +132,8 @@ title (▾/▸), and the block's type icon can be shown or hidden on the title.
   keywords counts); each part is toggleable.
 - **Apps**: launch device apps via exported‑activity intents.
 - **Note Clips**: snippets you lassoed from your notes, as labelled thumbnails (see below).
+- **To-do**: tasks you lassoed from your notes, each marked on the note with a tick-box you can check
+  from the dashboard or by hand (see below).
 - **Empty**: a spacer to reserve vertical space / line columns up.
 
 The **Stars** and **Keywords** blocks show their last‑scan time and a small **↻** in the block header
@@ -138,7 +145,7 @@ the legacy intents on older firmware.
 
 ### Note Clips
 
-In a note, lasso anything and tap **"Clip to Dashboard"** in the lasso toolbar; the snippet is captured
+In a note, lasso anything and tap **"Dashboard Clip"** in the lasso toolbar; the snippet is captured
 silently (no view opens) and pinned as a labelled thumbnail in any **Clips** block. Tapping a clip
 jumps back to its **source note and page**, and **follows that page** even if you later reorder it or
 move it to another note (the backlink resolves the note's stable page IDs and self-heals the pointer).
@@ -171,6 +178,38 @@ label chips (they combine with **OR**), plus a grey **no label** chip. Optionall
 
 ![A Clips block's settings (display, size, sort, filters)](docs/img/clips-config.png)
 
+### To-dos
+
+A to-do is a clip you capture as a **task**. In a note, lasso it and tap the second lasso button,
+**"Dashboard To-do"**: the area gets a frame plus a small **tick-box** in its top-left corner and a
+**"#N"** tag, and the task appears in any **To-do** block. The tick-box and "#N" are how the plugin
+re-finds the task on the page later, so they're always drawn (independent of the Clips frame setting).
+
+Checking works **both ways**:
+
+- **Tick in the dashboard** → the plugin draws the check inside the box on the note; untick and it
+  erases it.
+- **Tick by hand on the note** → tap **"↻ Check notes"** on the To-do block (or **↻ Refresh all**) and
+  the dashboard picks it up. It replaces your hand-drawn check with its own tick (so a later dashboard
+  untick can clear it). Un-checking is done from the dashboard; the hand-check pull is manual so opening
+  the dashboard stays fast. This runs for the note you have open.
+
+If a marked area gets lasso-cut to another page or note, the dashboard offers an **on-demand search**
+(this note, then all notes, newest first, with a Stop) to find its "#N" and sync it. The To-do block
+has **Open / Done** tabs, groups by note, filters by label, and a **🗑 Clear done**; finished tasks are
+kept (never auto-deleted) and are immune to the 200-clip cap. Deleting a to-do removes only its "#N"
+tag from the note (fast, expected page only), leaving the frame so the page still shows it was a task.
+
+### Contents
+
+The **Contents** block lists the **current note's headings** (Supernote "Title" elements) as a tappable
+outline; tap a heading to jump to its page. Titles carry no text, so each is **OCR'd** the first time
+and **cached per page**: a note you haven't changed paints instantly, and only the pages you edit are
+re-read. Converted (typewritten) titles are read directly, and legacy headings from older notes are
+included. The block header shows the note's name; you can map each of the four title styles to an
+indent level. The same on-device index also powers **note-title search** (the `title:` filter), which a
+Search block enables per block; it refreshes notes you've changed when you open the dashboard.
+
 ### Clock
 
 Faces: **Large**, **Compact**, **Weekday**, **Jumbo**, **Digital** (a real 7‑segment display, bundled
@@ -183,10 +222,13 @@ time (a ½ control adds the 30‑minute zones). A regional format sets the date 
 
 ### Search
 
-Searches file & folder names plus keywords from your scanned notes, grouped into Notes / PDFs / other
-docs / Folders / Keywords. Grammar: `"phrase"` (literal), `=exact`, `a|b` (either), `!word` (exclude),
-`f:folder`, `kw:` (keywords only), `star:` (starred files only), `type:note|pdf|doc|folder`, and
-`approx:` (typo‑tolerant). A block can be scoped to specific folders.
+Searches file & folder names plus keywords (and, when enabled, note **headings**) from your scanned
+notes, grouped into Notes / PDFs / other docs / Folders / Keywords / Titles. Grammar: `"phrase"`
+(literal), `=exact`, `a|b` (either), `!word` (exclude), `f:folder`, `kw:` (keywords only), `title:`
+(headings only, when title search is on), `star:` (starred files only), `type:note|pdf|doc|folder`, and
+`approx:` (typo‑tolerant). Turn on **"Also search note titles"** in a Search block to include headings
+(first indexing runs from there; afterwards notes you change are re-indexed when you open the dashboard).
+A block can be scoped to specific folders.
 
 ![Search results](docs/img/search.png)
 
