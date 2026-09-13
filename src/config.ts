@@ -199,9 +199,6 @@ export interface DashboardConfig {
   clipFontSize?: number;
   /** Add a "↩ source" link under a pasted clip. Off = paste the bare image. */
   clipBacklink?: boolean;
-  /** Paste a handwriting clip as two superimposed copies, so a lasso never holds
-   *  a lone picture (which the note app resizes instead of moving). Default on. */
-  clipPasteTwin?: boolean;
   /** MyStyle/fonts .ttf/.otf path for an OCR'd clip pasted as a text box; '' / undefined = the note's default font. */
   clipFontPath?: string;
   zones: Zone[];
@@ -335,10 +332,9 @@ function normalize(raw: any): DashboardConfig {
   const rawSize = typeof raw?.clipFontSize === 'number' ? raw.clipFontSize : 96;
   const clipFontSize: number = rawSize <= 48 ? 96 : Math.min(220, rawSize);
   const clipFontPath: string | undefined = typeof raw?.clipFontPath === 'string' && raw.clipFontPath ? raw.clipFontPath : undefined;
-  const clipPasteTwin: boolean = raw?.clipPasteTwin !== false; // default on
   const clipBacklink: boolean = raw?.clipBacklink !== false; // default on
 
-  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, clipFrame, clipText, clipFontSize, clipFontPath, clipPasteTwin, clipBacklink, zones};
+  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, clipFrame, clipText, clipFontSize, clipFontPath, clipBacklink, zones};
 }
 
 function isZone(z: any): z is Zone {

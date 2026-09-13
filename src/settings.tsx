@@ -164,6 +164,21 @@ function fontFam(path: string): string {
   return 'udf' + (h >>> 0).toString(36);
 }
 
+/** A titled, collapsible card that groups related settings so the Look step reads
+ *  as a few sections instead of one long wall. Open state is per-session. */
+function Group({title, defaultOpen = false, children}: {title: string; defaultOpen?: boolean; children: React.ReactNode}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <View style={ui.cfgGroup}>
+      <TouchableOpacity onPress={() => setOpen(o => !o)} activeOpacity={0.7} style={ui.cfgGroupHead}>
+        <Text style={ui.cfgGroupTitle}>{title}</Text>
+        <Text style={ui.cfgGroupChevron}>{open ? '▾' : '▸'}</Text>
+      </TouchableOpacity>
+      {open && <View style={ui.cfgGroupBody}>{children}</View>}
+    </View>
+  );
+}
+
 function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
   const cols = cfg.layout.columns;
   const setCols = (n: 1 | 2 | 3) =>
@@ -184,6 +199,7 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
   }, []);
   return (
     <View>
+      <Group title="Layout & theme" defaultOpen>
       <Text style={ui.wizStepTag}>Layout: columns</Text>
       <View style={ui.snapWrap}>
         {([1, 2, 3] as const).map(n => (
@@ -246,6 +262,8 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
         ))}
       </View>
 
+      </Group>
+      <Group title="Text & font" defaultOpen>
       <Text style={ui.wizStepTag}>Text size (bigger = easier finger taps)</Text>
       <View style={ui.row}>
         {(['S', 'M', 'L', 'XL'] as TextScale[]).map(sz => (
@@ -297,6 +315,8 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
         onChange={v => update(c => void (c.showIcons = v === 'on'))}
       />
 
+      </Group>
+      <Group title="Note capture" defaultOpen>
       <Text style={ui.wizStepTag}>Note clips</Text>
       <Text style={ui.subLabel}>In a note, lasso something and tap “Dashboard Clip” to send it to a Clips block. Optionally mark the captured area on the note.</Text>
       <Seg
@@ -309,15 +329,6 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
         options={[{v: 'on', label: 'With link'}, {v: 'off', label: 'Image only'}]}
         value={cfg.clipBacklink === false ? 'off' : 'on'}
         onChange={v => update(c => void (c.clipBacklink = v === 'on'))}
-      />
-      <Text style={ui.subLabel}>
-        Paste handwriting clips as two superimposed copies. The note app resizes a picture when it is the ONLY thing in a
-        lasso, so a lone pasted image shrinks a little each time you move it; a hidden twin keeps the selection a group.
-      </Text>
-      <Seg
-        options={[{v: 'on', label: 'Twin (no shrink)'}, {v: 'off', label: 'Single copy'}]}
-        value={cfg.clipPasteTwin === false ? 'off' : 'on'}
-        onChange={v => update(c => void (c.clipPasteTwin = v === 'on'))}
       />
       <Text style={ui.subLabel}>Keep the handwriting (image), or OCR the clip to text you can paste as an editable text box (falls back to the image when OCR finds nothing).</Text>
       <Seg
@@ -349,6 +360,8 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
         </>
       )}
 
+      </Group>
+      <Group title="Scanning" defaultOpen>
       <Text style={ui.wizStepTag}>Scanning (Stars &amp; Keywords)</Text>
       <Seg
         options={[
@@ -369,6 +382,7 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
           })
         }
       />
+      </Group>
     </View>
   );
 }

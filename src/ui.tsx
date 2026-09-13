@@ -211,6 +211,11 @@ export const ui = StyleSheet.create({
   addItemIcon: {width: 24, fontSize: 15, textAlign: 'center'},
   addItemText: {fontSize: 14, color: '#000000', fontWeight: '600', marginLeft: 4},
   // wizard
+  cfgGroup: {borderWidth: 2, borderColor: '#000000', borderRadius: 10, marginBottom: 12, overflow: 'hidden'},
+  cfgGroupHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 11, paddingHorizontal: 13, backgroundColor: '#eeeeee'},
+  cfgGroupTitle: {fontSize: 14, fontWeight: '700', color: '#000000', letterSpacing: 0.5},
+  cfgGroupChevron: {fontSize: 16, color: '#000000'},
+  cfgGroupBody: {paddingHorizontal: 13, paddingBottom: 12, borderTopWidth: 2, borderColor: '#000000'},
   wizTitle: {fontSize: 22, fontWeight: '700', color: '#000000'},
   wizStepTag: {fontSize: 12, letterSpacing: 1.5, textTransform: 'uppercase', color: '#666666', fontWeight: '700', marginTop: 10, marginBottom: 8},
   navBar: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, marginTop: 6, borderTopWidth: 1, borderColor: '#dddddd'},

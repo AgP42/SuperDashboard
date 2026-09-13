@@ -202,14 +202,14 @@ async function placeImage(
  * move (unreadable after 4-5). The moment the selection holds more than one
  * element the app only translates the group, which is why handwriting (dozens of
  * strokes) never suffers. A pixel-identical second copy is invisible and makes
- * the selection a group whatever the user lassos. Set clipPasteTwin: false in
- * config.json to paste a single copy.
+ * the selection a group whatever the user lassos. This is a firmware workaround,
+ * not a preference, so it is ALWAYS on.
  */
-async function insertLockedImage(clip: Clip, pageSize: {width: number; height: number}, twin: boolean): Promise<boolean> {
+async function insertLockedImage(clip: Clip, pageSize: {width: number; height: number}): Promise<boolean> {
   const first = await placeImage(clip.png, clip, pageSize);
   if (!first.inserted) return false;
   // Only twin when we know the exact rect: a misaligned copy would be visible.
-  if (twin && first.rect) await placeImage(clip.png, clip, pageSize, first.rect);
+  if (first.rect) await placeImage(clip.png, clip, pageSize, first.rect);
   return true;
 }
 
@@ -326,7 +326,7 @@ export async function pasteClip(clip: Clip, preferText = !!(clip.text && clip.te
 
     // OCR clip → editable text box; a handwriting clip → image (pasted twice,
     // superimposed, so a lasso never holds a lone picture: see insertLockedImage).
-    const ok = asText ? await insertLockedText(clip, pageSize, cfg) : await insertLockedImage(clip, pageSize, cfg?.clipPasteTwin !== false);
+    const ok = asText ? await insertLockedText(clip, pageSize, cfg) : await insertLockedImage(clip, pageSize);
     if (!ok) {
       ToastAndroid.show('Paste failed', ToastAndroid.SHORT);
       return;
