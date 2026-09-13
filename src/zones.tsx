@@ -10,7 +10,7 @@ import {BLOCK_HEIGHTS, KeywordDisplay, RECENT_DEFAULT, ScanSettings, Theme, Zone
 import {openFile, openFileAtPage, openFolder, launchApp} from './open';
 import {deleteStarByIndex, LineImg, unwrap} from './starText';
 import {NativeUIUtils, PluginCommAPI} from 'sn-plugin-lib';
-import {readNoteToc, TocEntry} from './notetoc';
+import {readNoteToc, cachedToc, TocEntry} from './notetoc';
 import {scanStars, scanKeywords, flushCurrentNote, noteTitle, parentFolder, recentModifiedFiles, KeywordHit} from './scanner';
 import {readRecent} from './recent';
 import {loadIndex, loadKeywords, loadTitles, loadStarredFiles, loadStats, buildIndex, runSearch, IndexData, IndexEntry, KwEntry, TitleHit} from './searchIndex';
@@ -18,7 +18,7 @@ import {ClockFace} from './clock';
 import {Clip, listClips, deleteClip, setClipDone, setClipKind, reanchorClip, setClipLabels, allClipLabels, updateClipSource} from './clips';
 import {pasteClip} from './paste';
 import {resolveClipTarget, pageIdAt} from './notepage';
-import {writeTodoCheck, clearTodoCheck, deepFindMark, drawCheckInBox, eraseCheckInBox, eraseTodoMark} from './todomark';
+import {writeTodoCheck, clearTodoCheck, deepFindMark, drawCheckInBox, eraseCheckInBox, untrackTodoMark} from './todomark';
 
 const {DashboardNative} = NativeModules;
 // Re-entrancy guard for a clip's tap-to-open (its resolve is async and may scan
@@ -664,10 +664,10 @@ function TodoZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type:
     reload();
   };
   const del = async (id: string) => {
-    const ok = await NativeUIUtils.showRattaDialog('Delete this to-do? Its mark on the note is removed too.', 'Cancel', 'Delete', false).catch(() => false);
+    const ok = await NativeUIUtils.showRattaDialog('Delete this to-do? (its #N marker on the note is removed)', 'Cancel', 'Delete', false).catch(() => false);
     if (!ok) return;
     const c = clips.find(x => x.id === id);
-    if (c && typeof c.markNum === 'number') await eraseTodoMark(c).catch(() => {});
+    if (c && typeof c.markNum === 'number') await untrackTodoMark(c).catch(() => {});
     await deleteClip(id);
     reload();
   };
@@ -675,7 +675,7 @@ function TodoZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type:
     const ok = await NativeUIUtils.showRattaDialog(`Delete ${doneCount} finished to-do${doneCount > 1 ? 's' : ''}?`, 'Cancel', 'Delete', false).catch(() => false);
     if (!ok) return;
     for (const c of sorted.filter(x => x.done)) {
-      if (typeof c.markNum === 'number') await eraseTodoMark(c).catch(() => {});
+      if (typeof c.markNum === 'number') await untrackTodoMark(c).catch(() => {});
       await deleteClip(c.id);
     }
     reload();
@@ -848,6 +848,10 @@ function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollap
           <Text style={[ui.metaMono, ff, struck, {marginRight: 6}]} numberOfLines={1}>
             {showNote ? noteTitle(c.sourcePath) + (c.sourcePage >= 0 ? ` · p.${c.sourcePage + 1}` : '') : c.sourcePage >= 0 ? `p.${c.sourcePage + 1}` : ''}
           </Text>
+          {typeof c.markNum === 'number' && (
+            // The on-note marker id, shown discreetly so the note<->dashboard link is legible.
+            <Text style={[ui.metaMono, ff, {marginRight: 6, color: '#9a9a9a'}]}>#{c.markNum}</Text>
+          )}
           {c.labels.map(l => (
             <Text key={l} style={[ui.clipChip, ff]}>{l}</Text>
           ))}
@@ -1017,6 +1021,7 @@ const zoneTitle = (t: string | undefined, fallback: string): string => (t === un
  *  message when the dashboard is over a PDF/EPUB or nothing (no titles there). */
 function TocZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'toc'}>; theme: Theme; ts: TScale; nonce?: number}) {
   const [data, setData] = useState<{path: string; readable: boolean; titles: TocEntry[]} | null>(null);
+  const tocTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const load = () => {
     (async () => {
       let p = '';
@@ -1025,13 +1030,25 @@ function TocZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'toc'}>; 
       } catch {
         /* no current file */
       }
-      // Keep the current outline visible while refreshing the SAME note (a cache
-      // hit is instant, so there's no flicker); only blank when the note changed.
-      setData(cur => (cur && cur.path === p ? cur : null));
-      setData({path: p, ...(await readNoteToc(p))});
+      // 1) Paint the last known outline INSTANTLY from cache (no footer read, no
+      //    OCR), so the block never blocks the open. Keep the current one if it's
+      //    the same note; else show the cache (or blank on a first-ever open).
+      const cached = await cachedToc(p);
+      setData(cur => (cur && cur.path === p ? cur : cached ? {path: p, readable: true, titles: cached} : null));
+      // 2) Refresh AFTER the other zones have loaded (deferred), and only re-OCR
+      //    the pages whose block length actually changed.
+      if (tocTimer.current) clearTimeout(tocTimer.current);
+      tocTimer.current = setTimeout(async () => {
+        setData({path: p, ...(await readNoteToc(p))});
+      }, 1200);
     })();
   };
-  useEffect(load, [nonce]);
+  useEffect(() => {
+    load();
+    return () => {
+      if (tocTimer.current) clearTimeout(tocTimer.current);
+    };
+  }, [nonce]);
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('dashboard_refresh_all', async () => {
       // Manual refresh: persist the editor's unsaved edits first, or a heading

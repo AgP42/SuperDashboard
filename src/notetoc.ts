@@ -253,6 +253,20 @@ export async function indexTitles(notePaths: string[], onProgress?: (done: numbe
   return {notes: total, titles};
 }
 
+/** The titles already in the cache for one note, WITHOUT any footer read or OCR.
+ *  Lets the Contents block paint instantly from the last result while the real
+ *  (possibly re-OCR'ing) refresh runs afterwards. null when the note isn't cached. */
+export async function cachedToc(path: string): Promise<TocEntry[] | null> {
+  if (!path || !/\.note$/i.test(path)) return null;
+  const cache = await loadCache();
+  const note = cache.notes[path];
+  if (!note) return null;
+  const out: TocEntry[] = [];
+  for (const pc of Object.values(note.pages)) out.push(...pc.titles);
+  out.sort((a, b) => a.page - b.page);
+  return out;
+}
+
 /** Every cached heading, flattened for the Search block. Reads the in-memory
  *  cache when it's already loaded, so a dashboard holding both a Contents block
  *  and a title-enabled Search block parses the file once. */

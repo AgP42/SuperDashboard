@@ -79,7 +79,21 @@ async function readFooterPages(path: string): Promise<{size: number; pages: {pag
 export async function readPageRevs(path: string): Promise<{page: number; rev: string}[] | null> {
   const fp = await readFooterPages(path);
   if (!fp) return null;
-  return fp.pages.map(p => ({page: p.page, rev: String(p.addr)})).sort((a, b) => a.page - b.page);
+  // rev = the page's block LENGTH, not its footer address. The address shifts for
+  // every page after an edited one (append-only save), so keying on it re-reads
+  // the whole note on any change; the length changes only when THAT page's own
+  // content changes. Costs one 4-byte read per page (negligible vs ~1-2s OCR).
+  const out: {page: number; rev: string}[] = [];
+  for (const p of fp.pages) {
+    let len = 0;
+    if (p.addr > 0 && p.addr + 4 <= fp.size) {
+      const lenR = await read(path, p.addr, 4);
+      if (lenR && lenR.s.length >= 4) len = u32le(lenR.s);
+    }
+    out.push({page: p.page, rev: String(len)});
+  }
+  out.sort((a, b) => a.page - b.page);
+  return out;
 }
 
 /** PAGEID marker in a page block ('' if none). */

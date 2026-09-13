@@ -325,10 +325,12 @@ async function handleLassoToClip(kind) {
       }
     }
 
-    // Optional frame: reuse the loaded config, and grab the bounds BEFORE dismissing.
+    // Grab the lasso bounds BEFORE dismissing, whenever we'll draw on the note:
+    // a clip only when a frame style is set, but a TO-DO always (its mark is drawn
+    // regardless of the clip-frame preference).
     let frame = (cfg && cfg.clipFrame) || 'off';
     let rect = null;
-    if (frame !== 'off') {
+    if (frame !== 'off' || kind === 'todo') {
       try {
         rect = unwrapR(await PluginCommAPI.getLassoRect());
       } catch (e) {

@@ -225,54 +225,32 @@ export async function clearTodoCheck(clip: Clip): Promise<boolean> {
 }
 
 /**
- * Remove EVERYTHING we drew for a to-do's mark from its source note: the "#N"
- * label, the tick-box, its shadow lines, any check strokes, and the outer frame.
- * Best-effort, on explicit delete. Identifies the cluster by the "#N" label and
- * geometry near the box / a large polygon anchored at the box centre; leaves the
- * user's own ink alone. Only searches the recorded source page (no deep scan).
+ * "Untrack" a to-do on delete: remove ONLY its "#N" label, and only if it's on
+ * the to-do's EXPECTED page (one getElements, no deep scan — delete happens on
+ * old notes long afterwards and must stay cheap). The frame, tick-box and any
+ * check are left in place, so the note still shows it was a to-do; losing the
+ * "#N" is the visible "no longer tracked" signal. Silent no-op if the label
+ * isn't on the expected page.
  */
-export async function eraseTodoMark(clip: Clip): Promise<void> {
+export async function untrackTodoMark(clip: Clip): Promise<void> {
   try {
     if (typeof clip.markNum !== 'number') return;
-    const found = await findTodoBox(clip);
-    if (!found) {
-      mlog(`${clip.id}: erase skipped (mark #${clip.markNum} not on its page)`);
-      return;
-    }
-    const {path, page, box} = found;
+    const t = await resolveClipTarget(clip.sourcePath, clip.sourcePageId, clip.sourcePage);
     const tag = `#${clip.markNum}`;
-    const bc = centre(box);
-    const els: any[] = unwrap<any[]>(await PluginFileAPI.getElements(page, path)) ?? [];
+    const els: any[] = unwrap<any[]>(await PluginFileAPI.getElements(t.page, t.path)) ?? [];
     try {
-      const nums: number[] = [];
-      for (const e of els) {
-        if (!e || typeof e.numInPage !== 'number') continue;
-        if ((e.type === 500 || e.type === 501 || e.type === 502) && e.textBox && (e.textBox.textContentFull ?? '').trim() === tag) {
-          nums.push(e.numInPage);
-          continue;
-        }
-        if (e.type === 700 && e.geometry) {
-          const b = boxOfPoints(e.geometry.points);
-          if (!b) continue;
-          const near = b.x1 > box.x1 - 20 && b.x2 < box.x2 + 20 && b.y1 > box.y1 - 20 && b.y2 < box.y2 + 20;
-          // Outer frame: a polygon whose top-left corner sits on the box centre
-          // (that's where the frame's corner was drawn) and clearly bigger than it.
-          const frame = Math.abs(b.x1 - bc.x) < BOX_SIDE && Math.abs(b.y1 - bc.y) < BOX_SIDE && (b.x2 - b.x1 > BOX_SIDE * 2 || b.y2 - b.y1 > BOX_SIDE * 2);
-          if (near || frame) nums.push(e.numInPage);
-        }
-      }
-      if (!nums.length) {
-        mlog(`${clip.id}: erase found nothing to remove`);
+      const label = els.find(e => e && (e.type === 500 || e.type === 501 || e.type === 502) && e.textBox && (e.textBox.textContentFull ?? '').trim() === tag);
+      if (!label || typeof label.numInPage !== 'number') {
+        mlog(`${clip.id}: untrack — ${tag} not on expected page ${t.page}, left as is`);
         return;
       }
-      nums.sort((a, b) => b - a);
-      const r: any = await PluginFileAPI.deleteElements(path, page, nums);
-      mlog(`${clip.id}: erased ${nums.length} mark element(s) ok=${r === true || !!(r && r.success)}`);
+      const r: any = await PluginFileAPI.deleteElements(t.path, t.page, [label.numInPage]);
+      mlog(`${clip.id}: untrack removed ${tag} ok=${r === true || !!(r && r.success)}`);
     } finally {
       await recycleAll(els);
     }
   } catch (e: any) {
-    mlog(`${clip.id}: eraseTodoMark failed: ${e && e.message}`);
+    mlog(`${clip.id}: untrackTodoMark failed: ${e && e.message}`);
   }
 }
 
