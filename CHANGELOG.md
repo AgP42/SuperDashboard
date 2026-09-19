@@ -10,7 +10,7 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
-## Unreleased
+## v1.9.0 — 2026-09-19
 
 ### New
 - **To-dos.** A dedicated **To-do** block, plus a second lasso button **"Dashboard To-do"** (the clip
