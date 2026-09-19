@@ -430,15 +430,18 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
                 // With 1-2 columns each block is wide enough to fit the name and
                 // its controls on one row; with 3 columns keep them stacked.
                 const oneLine = columns <= 2;
+                // 3 columns are narrow: with the extra ⓘ the big buttons overflow,
+                // so drop to the compact size there (still comfortably tappable).
+                const bigBtns = columns !== 3;
                 const ctrls = (
                   <View style={ui.secCtrls}>
-                    <Mini big label="▲" onPress={() => update(c => moveWithinColumn(c, i, -1))} />
-                    <Mini big label="▼" onPress={() => update(c => moveWithinColumn(c, i, 1))} />
-                    {ci > 0 && <Mini big label="◀" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci - 1))} />}
-                    {ci < columns - 1 && <Mini big label="▶" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci + 1))} />}
-                    {HELP[z.type] && <Mini big label="ⓘ" onPress={() => setHelpFor(z.type)} />}
-                    <Mini big label="🔧" onPress={() => setOpenCfg(openCfg === i ? null : i)} />
-                    <Mini big label="✕" onPress={() => { setOpenCfg(null); update(c => void c.zones.splice(i, 1)); }} />
+                    <Mini big={bigBtns} label="▲" onPress={() => update(c => moveWithinColumn(c, i, -1))} />
+                    <Mini big={bigBtns} label="▼" onPress={() => update(c => moveWithinColumn(c, i, 1))} />
+                    {ci > 0 && <Mini big={bigBtns} label="◀" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci - 1))} />}
+                    {ci < columns - 1 && <Mini big={bigBtns} label="▶" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci + 1))} />}
+                    {HELP[z.type] && <Mini big={bigBtns} label="ⓘ" onPress={() => setHelpFor(z.type)} />}
+                    <Mini big={bigBtns} label="🔧" onPress={() => setOpenCfg(openCfg === i ? null : i)} />
+                    <Mini big={bigBtns} label="✕" onPress={() => { setOpenCfg(null); update(c => void c.zones.splice(i, 1)); }} />
                   </View>
                 );
                 return (

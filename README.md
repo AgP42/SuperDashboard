@@ -112,8 +112,7 @@ block keeps its grid slot so the ones below it don't jump up). Any titled block 
 title (▾/▸), and the block's type icon can be shown or hidden on the title. In Settings → Sections, each
 block has a small **ⓘ** with quick, precise help on its options.
 
-- **Shortcuts**: open a folder, a note, a PDF, an EPUB or a comic (CBZ/XPS/FB2) in one tap (list /
-  grid / inline).
+- **Shortcuts**: open a folder, a note, a PDF or an EPUB in one tap (list / grid / inline).
 - **Files**: a small in‑dashboard file browser: walk your folders and open a note/document without
   leaving the dashboard.
 - **Search**: type to find files, folders, keywords and note **headings** across your notes (small

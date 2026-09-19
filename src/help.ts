@@ -14,7 +14,7 @@ export interface HelpEntry {
 export const HELP: Record<string, HelpEntry> = {
   shortcuts: {
     title: 'Shortcuts',
-    what: 'One-tap openers for the folders, notes, PDFs, EPUBs and comics you use most; each opens on its saved page.',
+    what: 'One-tap openers for the folders, notes, PDFs and EPUBs you use most; each opens on its saved page.',
     how: 'Add with the "+" (a browser: tick several items, then Save). Reorder with ▲▼, remove with ✕. Layout: List, Grid (tiles) or Inline (wrapping chips).',
   },
   nav: {
@@ -77,6 +77,6 @@ export const HELP: Record<string, HelpEntry> = {
     title: 'To-do',
     what: 'Tasks you lassoed with "Dashboard To-do"; each is marked on the note with a tick-box and a #N tag.',
     how: 'Open / Done tabs, "↻ Check notes" (pull a hand-drawn check from the open note) and "Clear done". Layout, Thumbnail size, Sort, Display and the folder / label filters work like Clips.',
-    good: 'Tick in the dashboard to draw the check on the note; un-checking is done from the dashboard.',
+    good: 'Tick in the dashboard to draw the check on the note; or tick it by hand on the note and it shows as done here after "↻ Check notes". Un-checking is done from the dashboard. You can also move a marked to-do around, even to another page or note: the plugin finds it again by its #N tag.',
   },
 };

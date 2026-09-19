@@ -115,7 +115,7 @@ with quick, precise help on its options (this guide is the longer version). Here
 
 ### 🔗 Shortcuts
 
-One-tap openers for the folders, notes, PDFs, EPUBs and comics (CBZ/XPS/FB2) you use most; each opens
+One-tap openers for the folders, notes, PDFs and EPUBs you use most; each opens
 **on the right page**. Add them with the multi-select browser (section 6); show them as a list, a grid,
 or inline.
 
@@ -320,8 +320,8 @@ cloud-synced and are cleaned up automatically.
 
 ## 7. Good to know / limits
 
-- **Page jump**: notes, PDFs, EPUBs and comics open **on the target page** (a star's page, a keyword's
-  page, a shortcut's saved page, a clip's or heading's source page) via the firmware's file opener.
+- **Page jump**: notes, PDFs and EPUBs open **on the target page** (a star's page, a keyword's page, a
+  shortcut's saved page, a clip's or heading's source page) via the firmware's file opener.
 - **Recent on Chauvet 3.29.43 / 2.26.40+**: the device's recently-opened list (`/Recent`) is outside the
   plugin's file sandbox there, so Recent shows recently-**modified** notes/documents instead.
 - **Stars/keywords in PDFs/EPUBs** aren't listed (the system only exposes them for notes).
