@@ -7,7 +7,7 @@
  * editor here; advanced users edit MyStyle/Plugins/Dashboard/config.json directly.
  */
 import React, {useEffect, useRef, useState} from 'react';
-import {Image, NativeModules, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
+import {Image, Modal as RNModal, NativeModules, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
 
 const KOFI_QR = require('../assets/kofi-qr.png');
 
@@ -44,6 +44,7 @@ import {APP_BLOCK, CURATED_APPS} from './apps';
 import {Btn, fileGlyph as fileKindGlyph, ui} from './ui';
 import {ClockFace} from './clock';
 import {allClipLabels} from './clips';
+import {HELP} from './help';
 
 const {DashboardNative} = NativeModules;
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o));
@@ -401,6 +402,8 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
   const columns = cfg.layout.columns;
   const [openCfg, setOpenCfg] = useState<number | null>(null); // zone index whose 🔧 panel is open
   const [addingCol, setAddingCol] = useState<number | null>(null); // column whose add-menu is open
+  const [helpFor, setHelpFor] = useState<string | null>(null); // zone type whose (i) help is open
+  const help = helpFor ? HELP[helpFor] : undefined;
   const colOf = (z: Zone) => Math.max(0, Math.min(columns - 1, z.col ?? 0));
 
   return (
@@ -433,6 +436,7 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
                     <Mini big label="▼" onPress={() => update(c => moveWithinColumn(c, i, 1))} />
                     {ci > 0 && <Mini big label="◀" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci - 1))} />}
                     {ci < columns - 1 && <Mini big label="▶" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci + 1))} />}
+                    {HELP[z.type] && <Mini big label="(i)" onPress={() => setHelpFor(z.type)} />}
                     <Mini big label="🔧" onPress={() => setOpenCfg(openCfg === i ? null : i)} />
                     <Mini big label="✕" onPress={() => { setOpenCfg(null); update(c => void c.zones.splice(i, 1)); }} />
                   </View>
@@ -482,6 +486,19 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
           );
         })}
       </View>
+      {help && (
+        <RNModal transparent animationType="fade" visible onRequestClose={() => setHelpFor(null)}>
+          <TouchableOpacity activeOpacity={1} style={ui.helpBackdrop} onPress={() => setHelpFor(null)}>
+            <View style={ui.helpCard}>
+              <Text style={ui.helpTitle}>(i) {help.title}</Text>
+              <Text style={ui.helpBody}>{help.body}</Text>
+              <TouchableOpacity style={ui.helpBtn} onPress={() => setHelpFor(null)}>
+                <Text style={ui.helpBtnText}>Got it</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </RNModal>
+      )}
     </View>
   );
 }

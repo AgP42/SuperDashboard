@@ -941,7 +941,7 @@ function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollap
               // 'both' shows image + text, so offer BOTH paste targets explicitly.
               <>
                 <TouchableOpacity onPress={() => runPaste(false)} hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
-                  <Text style={[ui.clipBtn, ff]}>📋 Paste Image</Text>
+                  <Text style={[ui.clipBtn, ff]}>📋 Paste Ink</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => runPaste(true)} hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
                   <Text style={[ui.clipBtn, ff]}>📋 Paste Text</Text>
@@ -1211,7 +1211,7 @@ function ZoneFrame({
             {help ? (
               // Own touch target so tapping ⓘ opens help without toggling collapse.
               <TouchableOpacity onPress={() => setHelpOpen(true)} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-                <Text style={{fontSize: 15 * hs, color: sp.line, marginLeft: 10}}>ⓘ</Text>
+                <Text style={{fontSize: 14 * hs, fontWeight: '700', color: sp.line, marginLeft: 10}}>(i)</Text>
               </TouchableOpacity>
             ) : null}
             {onRefresh ? (
@@ -1229,7 +1229,7 @@ function ZoneFrame({
         <Modal transparent animationType="fade" visible={helpOpen} onRequestClose={() => setHelpOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={ui.helpBackdrop} onPress={() => setHelpOpen(false)}>
             <View style={ui.helpCard}>
-              <Text style={[ui.helpTitle, tf]}>ⓘ {help.title}</Text>
+              <Text style={[ui.helpTitle, tf]}>(i) {help.title}</Text>
               <Text style={[ui.helpBody, tf]}>{help.body}</Text>
               <TouchableOpacity style={ui.helpBtn} onPress={() => setHelpOpen(false)}>
                 <Text style={[ui.helpBtnText, tf]}>Got it</Text>

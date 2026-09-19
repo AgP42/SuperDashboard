@@ -26,6 +26,10 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 - **Search note titles.** The Search block can also match note headings (`title:`), sharing the Contents
   index. Enable it per block; notes you change are re-indexed when you open the dashboard.
 - **More Recent items.** The Recent block now offers **4 / 8 / 12 / 16 / 20** (was 3 / 5 / 8).
+- **Paste clips & to-dos as native ink.** A handwriting clip now pastes back as **editable strokes**
+  (the original vector "sticker"), not a flat image: you can move, resize and even edit it like anything
+  you wrote, with no more shrink-on-move. (Older clips captured before this update still paste as an
+  image.)
 
 ### Improved
 - **In-app help.** Tap the **ⓘ** on any block's header for a short, offline explanation of that module.

@@ -304,6 +304,28 @@ async function insertBacklink(clip: Clip, targetPath: string, currentPath: strin
   }
 }
 
+/** Paste the clip's .sticker (native ink) via insertSticker, into the current page.
+ *  Returns false when there's no sticker (older clips) so the caller falls back to
+ *  the PNG. Re-test of the historical "sticker squashes on move" firmware bug. */
+async function insertStickerClip(clip: Clip): Promise<boolean> {
+  const sticker = clip.png.replace(/\.png$/i, '.sticker');
+  try {
+    const exists = await DashboardNative?.fileExists?.(sticker);
+    if (!exists) {
+      plog('no .sticker for clip; falling back to image');
+      return false;
+    }
+    const r: any = await PluginCommAPI.insertSticker(sticker);
+    const ok = r === true || !!(r && r.success);
+    plog(`insertSticker ok=${ok}`);
+    if (ok) await save();
+    return ok;
+  } catch (e: any) {
+    plog(`insertSticker threw: ${e && e.message}`);
+    return false;
+  }
+}
+
 /** Paste a clip into the currently-open note (+ a link back to its source).
  *  `preferText` (from the block's display mode) inserts an editable text box when
  *  the clip has OCR text; otherwise the clip is pasted as an image. */
@@ -324,9 +346,11 @@ export async function pasteClip(clip: Clip, preferText = !!(clip.text && clip.te
       /* defaults */
     }
 
-    // OCR clip → editable text box; a handwriting clip → image (pasted twice,
-    // superimposed, so a lasso never holds a lone picture: see insertLockedImage).
-    const ok = asText ? await insertLockedText(clip, pageSize, cfg) : await insertLockedImage(clip, pageSize);
+    // OCR clip → editable text box. A handwriting clip → native sticker ink when we
+    // have one (insertSticker), falling back to the twin-image paste otherwise.
+    const ok = asText
+      ? await insertLockedText(clip, pageSize, cfg)
+      : (await insertStickerClip(clip)) || (await insertLockedImage(clip, pageSize));
     if (!ok) {
       ToastAndroid.show('Paste failed', ToastAndroid.SHORT);
       return;

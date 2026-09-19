@@ -358,13 +358,10 @@ async function handleLassoToClip(kind) {
       blog(`[clip] getStickerSize: ${e && e.message}`);
     }
     await PluginCommAPI.generateStickerThumbnail(stickerPath, pngPath, size);
-    // The .sticker was only an intermediate for the PNG; drop it. Pasting a clip
-    // back into a note uses the PNG (insertImage → a normal Picture element):
-    // the vector sticker path (insertSticker) squashes vertically on every
-    // move/resize, so we deliberately paste raster instead.
-    try {
-      await DashboardNative?.pruneMatching?.(dir, `clip_${id}.sticker`, '');
-    } catch {}
+    // KEEP the .sticker alongside the PNG: the PNG is the dashboard thumbnail, but
+    // pasting the vector sticker (insertSticker) gives native ink. (Historically we
+    // pruned it because insertSticker squashed on move; re-testing that on current
+    // firmware.) It's cleaned up with the clip (deleteClip removes .png and .sticker).
 
     // A to-do always gets a mark (its note<->dashboard handle), whatever the
     // clip-frame setting; a plain clip only gets the frame when the user enabled it.

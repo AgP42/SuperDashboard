@@ -213,9 +213,9 @@ reorder it or move it to another note).
 - **OCR to text (optional)**: turn on **OCR text** in Look → Note capture. Recognition runs in the
   **background** after capture; each block then shows **Handwriting / OCR text / Both**. A pasted OCR
   clip becomes an **editable text box** in your chosen font & size.
-- **Paste back into a note** with **📋 Paste** (a handwriting clip as an image, an OCR clip as a text
-  box), each with a small **↩ source** link under it. Move / resize by lassoing it; a pasted image is
-  removed by lasso-select → Delete (the eraser doesn't remove images).
+- **Paste back into a note** with **📋 Paste** (a handwriting clip as **native ink**: editable strokes
+  you can move, resize and rewrite, with no shrink-on-move; older clips paste as an image. An OCR clip
+  pastes as a text box). Each gets a small **↩ source** link under it. Move / resize by lassoing it.
 - **On-note frame (optional)**: a grey or black rectangle drawn around what you captured, so the note
   shows what was clipped. It's permanent (deleting the clip doesn't erase it).
 

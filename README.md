@@ -150,9 +150,9 @@ In a note, lasso anything and tap **"Dashboard Clip"** in the lasso toolbar; the
 silently (no view opens) and pinned as a labelled thumbnail in any **Clips** block. Tapping a clip
 jumps back to its **source note and page**, and **follows that page** even if you later reorder it or
 move it to another note (the backlink resolves the note's stable page IDs and self-heals the pointer).
-**Paste** a clip into the note you have open with **📋**: a handwriting clip is inserted as an image, an
-OCR clip as an **editable text box**, each with a small **"↩ source"** link under it (move or delete it
-with the lasso, like any element). **Underline** a word with the straight-line tool while clipping and
+**Paste** a clip into the note you have open with **📋**: a handwriting clip is inserted as **native ink**
+(its original vector strokes: move, resize and even edit it like anything you wrote; older clips paste as
+an image), an OCR clip as an **editable text box**, each with a small **"↩ source"** link under it. **Underline** a word with the straight-line tool while clipping and
 it becomes the clip's **label** automatically (on-device OCR, with no delay when no underline is
 present); manage labels with **🏷**.
 
