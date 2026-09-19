@@ -10,7 +10,7 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
-## v1.9.0 — 2026-09-19
+## v2.0.0 — 2026-09-19
 
 ### New
 - **To-dos.** A dedicated **To-do** block, plus a second lasso button **"Dashboard To-do"** (the clip
@@ -28,6 +28,7 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 - **More Recent items.** The Recent block now offers **4 / 8 / 12 / 16 / 20** (was 3 / 5 / 8).
 
 ### Improved
+- **In-app help.** Tap the **ⓘ** on any block's header for a short, offline explanation of that module.
 - **Settings "Look" page** is grouped into collapsible cards (Layout & theme, Text & font, Note capture,
   Scanning) instead of one long list.
 - **Faster dashboard open**: the Contents outline loads after the other blocks and only re-reads pages

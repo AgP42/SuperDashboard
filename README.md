@@ -109,7 +109,8 @@ remains the ultimate fallback.
 Arranged in **1, 2 or 3 independent columns**, flowing either as **masonry** (each block takes its
 natural height) or **fixed height** (each block gets a set height and scrolls inside; collapsing a
 block keeps its grid slot so the ones below it don't jump up). Any titled block **collapses** to its
-title (▾/▸), and the block's type icon can be shown or hidden on the title.
+title (▾/▸), and the block's type icon can be shown or hidden on the title. Each block header carries a
+small **ⓘ** that opens a short, offline explanation of that module.
 
 - **Shortcuts**: open a folder, a note, a PDF, an EPUB or a comic (CBZ/XPS/FB2) in one tap (list /
   grid / inline).

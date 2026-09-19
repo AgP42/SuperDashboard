@@ -210,6 +210,13 @@ export const ui = StyleSheet.create({
   addItem: {flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 11, borderBottomWidth: 1, borderColor: '#e6e6e6'},
   addItemIcon: {width: 24, fontSize: 15, textAlign: 'center'},
   addItemText: {fontSize: 14, color: '#000000', fontWeight: '600', marginLeft: 4},
+  // per-module help (ⓘ)
+  helpBackdrop: {flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: 24},
+  helpCard: {backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#000000', borderRadius: 12, padding: 18, maxWidth: 560, width: '100%'},
+  helpTitle: {fontSize: 18, fontWeight: '700', color: '#000000', marginBottom: 8},
+  helpBody: {fontSize: 14, lineHeight: 21, color: '#222222'},
+  helpBtn: {alignSelf: 'flex-end', marginTop: 16, borderWidth: 2, borderColor: '#000000', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 16},
+  helpBtnText: {fontSize: 14, fontWeight: '700', color: '#000000'},
   // wizard
   cfgGroup: {borderWidth: 2, borderColor: '#000000', borderRadius: 10, marginBottom: 12, overflow: 'hidden'},
   cfgGroupHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 11, paddingHorizontal: 13, backgroundColor: '#eeeeee'},

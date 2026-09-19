@@ -19,6 +19,7 @@ import {Clip, listClips, deleteClip, setClipDone, setClipKind, reanchorClip, set
 import {pasteClip} from './paste';
 import {resolveClipTarget, pageIdAt} from './notepage';
 import {writeTodoCheck, clearTodoCheck, deepFindMark, drawCheckInBox, eraseCheckInBox, untrackTodoMark, normalizeTodoMark} from './todomark';
+import {HELP} from './help';
 
 const {DashboardNative} = NativeModules;
 // Re-entrancy guard for a clip's tap-to-open (its resolve is async and may scan
@@ -120,6 +121,7 @@ export function ZoneView({
         collapsed: zone.collapsed,
         onToggle: onToggleCollapse && index !== undefined && zone.type !== 'spacer' ? () => onToggleCollapse(index) : undefined,
         icon: showIcons ? ZONE_ICONS[zone.type] : undefined,
+        helpKey: zone.type,
       }}>
       {inner}
     </ZoneChromeContext.Provider>
@@ -1128,7 +1130,7 @@ function TocZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'toc'}>; 
 
 /** Per-zone chrome (collapse state + toggle + type icon), supplied by ZoneView so
  *  ZoneFrame doesn't need every zone component to thread these props. */
-const ZoneChromeContext = React.createContext<{collapsed?: boolean; onToggle?: () => void; icon?: string}>({});
+const ZoneChromeContext = React.createContext<{collapsed?: boolean; onToggle?: () => void; icon?: string; helpKey?: string}>({});
 
 /** Per-theme style pieces so one render path covers all designs; cleanly
  *  supports the collapse arrow + type icon on every one. */
@@ -1185,6 +1187,8 @@ function ZoneFrame({
   children: React.ReactNode;
 }) {
   const chrome = useContext(ZoneChromeContext);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const help = chrome.helpKey ? HELP[chrome.helpKey] : undefined;
   const tf = font ? {fontFamily: font} : null;
   const shownTitle = (chrome.icon ? chrome.icon + ' ' : '') + title;
   const collapsible = !!chrome.onToggle;
@@ -1204,6 +1208,12 @@ function ZoneFrame({
           </Text>
           <View style={{flexDirection: 'row', alignItems: 'center'}}>
             {meta ? <Text style={sp.meta}>{meta}</Text> : null}
+            {help ? (
+              // Own touch target so tapping ⓘ opens help without toggling collapse.
+              <TouchableOpacity onPress={() => setHelpOpen(true)} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                <Text style={{fontSize: 15 * hs, color: sp.line, marginLeft: 10}}>ⓘ</Text>
+              </TouchableOpacity>
+            ) : null}
             {onRefresh ? (
               // Its own touch target so tapping ↻ refreshes without toggling collapse.
               <TouchableOpacity onPress={onRefresh} disabled={refreshing} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
@@ -1215,6 +1225,19 @@ function ZoneFrame({
         </HeaderTag>
       )}
       {!collapsed && <View style={sp.body ?? undefined}>{children}</View>}
+      {help && (
+        <Modal transparent animationType="fade" visible={helpOpen} onRequestClose={() => setHelpOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={ui.helpBackdrop} onPress={() => setHelpOpen(false)}>
+            <View style={ui.helpCard}>
+              <Text style={[ui.helpTitle, tf]}>ⓘ {help.title}</Text>
+              <Text style={[ui.helpBody, tf]}>{help.body}</Text>
+              <TouchableOpacity style={ui.helpBtn} onPress={() => setHelpOpen(false)}>
+                <Text style={[ui.helpBtnText, tf]}>Got it</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </View>
   );
 }
