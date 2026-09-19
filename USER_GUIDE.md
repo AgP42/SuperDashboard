@@ -110,8 +110,8 @@ it, **✎** edits its displayed title (leave blank to hide it). A live preview s
 ## 4. The modules
 
 Each module is a block you add in **Sections**. Arrange any number of them across your columns; any
-titled block **collapses** to its title (▾ / ▸). Tap the **ⓘ** on a block's header for a short,
-offline explanation right on the device (this guide is the longer version). Here's what each one does.
+titled block **collapses** to its title (▾ / ▸). In Settings → Sections, each block has a small **ⓘ**
+with quick, precise help on its options (this guide is the longer version). Here's what each one does.
 
 ### 🔗 Shortcuts
 

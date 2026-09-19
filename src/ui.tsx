@@ -213,7 +213,8 @@ export const ui = StyleSheet.create({
   // per-module help (ⓘ)
   helpBackdrop: {flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: 24},
   helpCard: {backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#000000', borderRadius: 12, padding: 18, maxWidth: 560, width: '100%'},
-  helpTitle: {fontSize: 18, fontWeight: '700', color: '#000000', marginBottom: 8},
+  helpTitle: {fontSize: 18, fontWeight: '700', color: '#000000', marginBottom: 10},
+  helpLabel: {fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', fontWeight: '700', color: '#666666', marginTop: 10, marginBottom: 3},
   helpBody: {fontSize: 14, lineHeight: 21, color: '#222222'},
   helpBtn: {alignSelf: 'flex-end', marginTop: 16, borderWidth: 2, borderColor: '#000000', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 16},
   helpBtnText: {fontSize: 14, fontWeight: '700', color: '#000000'},

@@ -32,7 +32,7 @@ the `.snplg` goes in your device's `MyStyle` folder, then
   image.)
 
 ### Improved
-- **In-app help.** Tap the **ⓘ** on any block's header for a short, offline explanation of that module.
+- **In-app help.** In Settings → Sections, each block has a **ⓘ** with quick, precise help on its options.
 - **Settings "Look" page** is grouped into collapsible cards (Layout & theme, Text & font, Note capture,
   Scanning) instead of one long list.
 - **Faster dashboard open**: the Contents outline loads after the other blocks and only re-reads pages

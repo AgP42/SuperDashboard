@@ -436,7 +436,7 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
                     <Mini big label="▼" onPress={() => update(c => moveWithinColumn(c, i, 1))} />
                     {ci > 0 && <Mini big label="◀" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci - 1))} />}
                     {ci < columns - 1 && <Mini big label="▶" onPress={() => update(c => void ((c.zones[i] as ZoneCommon).col = ci + 1))} />}
-                    {HELP[z.type] && <Mini big label="(i)" onPress={() => setHelpFor(z.type)} />}
+                    {HELP[z.type] && <Mini big label="ⓘ" onPress={() => setHelpFor(z.type)} />}
                     <Mini big label="🔧" onPress={() => setOpenCfg(openCfg === i ? null : i)} />
                     <Mini big label="✕" onPress={() => { setOpenCfg(null); update(c => void c.zones.splice(i, 1)); }} />
                   </View>
@@ -490,8 +490,17 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
         <RNModal transparent animationType="fade" visible onRequestClose={() => setHelpFor(null)}>
           <TouchableOpacity activeOpacity={1} style={ui.helpBackdrop} onPress={() => setHelpFor(null)}>
             <View style={ui.helpCard}>
-              <Text style={ui.helpTitle}>(i) {help.title}</Text>
-              <Text style={ui.helpBody}>{help.body}</Text>
+              <Text style={ui.helpTitle}>ⓘ {help.title}</Text>
+              <Text style={ui.helpLabel}>What it does</Text>
+              <Text style={ui.helpBody}>{help.what}</Text>
+              <Text style={ui.helpLabel}>How to configure</Text>
+              <Text style={ui.helpBody}>{help.how}</Text>
+              {help.good ? (
+                <>
+                  <Text style={ui.helpLabel}>Good to know</Text>
+                  <Text style={ui.helpBody}>{help.good}</Text>
+                </>
+              ) : null}
               <TouchableOpacity style={ui.helpBtn} onPress={() => setHelpFor(null)}>
                 <Text style={ui.helpBtnText}>Got it</Text>
               </TouchableOpacity>
