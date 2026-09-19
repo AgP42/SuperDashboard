@@ -1,10 +1,9 @@
 # SuperDashboard for Supernote: User Guide
 
 SuperDashboard turns a floating **⊕ bubble** (and the plugin toolbar button) into a launcher for your
-Supernote: one tap opens a dashboard you compose yourself from **shortcuts**, a **file browser**,
-**name & title search**, a **Contents** outline of the current note, **recent files**, **stars**,
-**keywords**, a **clock**, **device status**, **app** launchers, **Note Clips** and **To-dos**. It runs
-fully on-device and offline.
+Supernote: one tap opens a dashboard you compose yourself from **modules** (blocks): shortcuts, a file
+browser, name & title search, a Contents outline, recent files, stars, keywords, a clock, device
+status, app launchers, Note Clips and To-dos. It runs fully on-device and offline.
 
 ![The dashboard](docs/img/dashboard-hero.png)
 
@@ -16,24 +15,11 @@ fully on-device and offline.
 settings wizard, and folding back to the bubble.* ▶ [Full-quality walkthrough (MP4)](docs/dashboard-demo.mp4)
 
 > **Which version do I need?** Supernote's firmware is called **Chauvet** (the platform name, like
-> "Android"), so what matters is the **version number**. This build (**v1.0.2**) is for **Chauvet
-> 3.29.43** (Manta / Nomad) / **2.26.40** (A5 X / A6 X) **or later**, which added the plugin permission
-> system. If your device is on an **older** Chauvet, use **v0.22.0** instead: a build made for one
-> firmware version won't run on the other ("package not compatible", or it does nothing). Check your
-> version in the device settings.
->
-> **First-run permissions:** on 3.29.43 / 2.26.40+, SuperDashboard asks once for **file access**. It
-> declares two plugin permissions (shown under Settings → Apps → Plugins → SuperDashboard → Permissions):
->
-> - **FILE:READ**: to read your notes & folders: scan **stars/keywords**, build the **search** index,
->   read **Recent**, browse in the **file browser**, capture **Note Clips**, and load your **saved settings**.
-> - **FILE:WRITE**: to **save your settings/profiles**, **delete a star** from a note, and (only when you
->   turn it on) draw the optional **clip frame** on a note.
->
-> The Chauvet firmware enforces this even for plain file reads, so without READ the scans fail silently.
-> If you decline, the launcher (shortcuts, apps, opening files/folders, clock, device status) keeps
-> working; only the note-scanning zones and saving settings are affected. SuperDashboard is fully
-> offline: **no INTERNET permission**, no network calls.
+> "Android"), so what matters is the **version number**. This build is for **Chauvet 3.29.43**
+> (Manta / Nomad) / **2.26.40** (A5 X / A6 X) **or later**, which added the plugin permission system.
+> If your device is on an **older** Chauvet, use **v0.22.0** instead: a build made for one firmware
+> version won't run on the other ("package not compatible", or it does nothing). Check your version in
+> the device settings.
 
 ---
 
@@ -49,126 +35,247 @@ settings wizard, and folding back to the bubble.* ▶ [Full-quality walkthrough 
 |---|---|
 | ![Plugins page](docs/img/install-plugins.png) | ![About this plugin](docs/img/about.png) |
 
-Open any note or document and tap the **SuperDashboard** button in the side toolbar. On first run it opens
-the Settings wizard (nothing is configured yet); afterwards it opens your dashboard directly. The
+Open any note or document and tap the **SuperDashboard** button in the side toolbar. On first run it
+opens the Settings wizard (nothing is configured yet); afterwards it opens your dashboard directly. The
 floating bubble also opens the dashboard from anywhere.
+
+**First-run permissions (Chauvet 3.29.43 / 2.26.40+).** SuperDashboard asks once for **file access**;
+the two permissions are listed under Settings → Apps → Plugins → SuperDashboard → Permissions:
+
+- **FILE:READ**: read your notes & folders: scan **stars/keywords**, build the **search** index, index
+  **note headings** (Contents / title search), read **Recent**, browse in the **file browser**, capture
+  **Note Clips and To-dos**, and load your **saved settings**.
+- **FILE:WRITE**: **save your settings/profiles**, **paste a clip** into a note, **mark a To-do**
+  (tick-box + "#N") and **draw/erase its check**, **delete a star** from a note, and (only when you turn
+  it on) draw the optional **clip frame**.
+
+Without READ the scans fail silently. If you decline, the launcher (shortcuts, apps, opening
+files/folders, clock, device status) keeps working; only the note-scanning modules and saving settings
+are affected. SuperDashboard is fully offline: **no INTERNET permission**, no network calls.
 
 ---
 
-## 2. The bubble
+## 2. The bubble and the toolbar button
 
-The dashboard's **⊖** button folds it into a small floating **⊕ bubble** (opening a note or shortcut
-from the dashboard also leaves it running as the bubble). It floats over everything: notes,
-folders, apps, settings.
+There are two ways in:
 
-- **Tap** to open your dashboard full-screen.
-- **Drag** it anywhere; it stays where you leave it. On its very first appearance it sits **top-right**.
-
-The bubble hides itself while the dashboard is open and comes back when you leave, automatically, by
-any exit (buttons, a stray edge gesture, the system backgrounding the view), so it never gets stuck
-off-screen. After a device restart (or auto power-off) it re-appears when the plugin next loads.
+- The **bubble**: the dashboard's **⊖** button folds it into a small floating **⊕ house bubble** that
+  hovers over everything (notes, folders, apps, settings). **Tap** it to open the dashboard; **drag** it
+  anywhere and it stays. It hides while the dashboard is open and returns on any exit, so it never gets
+  stuck off-screen; after a restart it reappears when the plugin next loads. In Settings → *Look* it's a
+  simple **On / Off** choice. Removing the plugin clears the bubble automatically.
+- The **toolbar button** (**SuperDashboard**, in a note/document side toolbar) opens the dashboard too.
+  Set the bubble **Off** to rely on the toolbar button alone.
 
 ![The house bubble on a note](docs/screenshots/bubble-house.png)
 
-The bubble is the **house logo** in a small rounded chip: icon only. In Settings → *Look* → Bubble
-it's a simple **On / Off** choice; **Off** uses only the toolbar **SuperDashboard** button.
-**Removing the plugin now clears the bubble automatically**, so you no longer have to set it Off first
-before uninstalling (a reboot remains the ultimate fallback if one ever lingers).
-
 ---
 
-## 3. The dashboard
-
-The dashboard is **1, 2 or 3 columns** of **blocks**. Tap anything to act. Top-left is
-**⚙ Configuration** (kept away from the busy right side); the title is centred; top-right are
-**↻ Refresh all** and **⊖** (fold back to the bubble). Every block can be **collapsed** to just its
-title (tap the ▾ / ▸ on its header); the state is remembered.
-
-The blocks you can place:
-
-- **Shortcuts**: open a folder (opens the file manager there), a note, a PDF, an EPUB or a comic
-  (CBZ/XPS/FB2), and it opens **on the right page**. List, grid, or inline.
-- **Files**: a small **file browser** to walk your folders and open any file, right from the dashboard.
-- **Search**: type to find files, folders, keywords and note **headings** (see section 5).
-- **Contents**: the current note's **headings** as a tappable outline; tap one to jump to its page
-  (see section 9b).
-- **Recent**: your recently-used notes & documents. On the stable firmware these are the device's
-  recently-**opened** files. On Chauvet 3.29.43 / 2.26.40 and later that list is outside the plugin
-  sandbox, so Recent instead shows the recently-**modified** notes/documents under `/Note` and
-  `/Document`, newest first. You pick how many to show (**4 / 8 / 12 / 16 / 20**).
-- **Stars**: every starred (★) page from the last scan, grouped by note (see section 6).
-- **Keywords**: your notes' keywords, shown as tappable **chips**; each chip opens that exact note + page.
-- **Clock**: time, date, week number and extra time zones, in several faces (see section 7).
-- **Device**: battery, free storage and library stats (see section 8).
-- **Apps**: buttons that launch ToDo, Calendar, Document, Files, or any installed app.
-- **Note Clips**: snippets you lassoed from a note, pinned as thumbnails that link back to their page
-  (see section 9).
-- **To-do**: tasks you lassoed from a note, each marked on the note with a tick-box you check from the
-  dashboard or by hand (see section 9a).
-
----
-
-## 4. Building your dashboard (Settings)
+## 3. Building your dashboard (Settings)
 
 Open Settings from **⚙ Configuration** on the dashboard (or the toolbar button on first run). It's a
 **2-step wizard** (Look, Sections); every change **saves automatically**. The header always shows
-**↺ Reset all** and **▤ Save/load config** (see section 10), and a **✕** to close. **▦ Save & go to
-Dashboard** or **Next →** move you along. A support footer sits under the nav bar on every step.
+**↺ Reset all**, **▤ Save/load config** (see section 5), and a **✕** to close.
 
-### Step 1 - Look
+### Look
 
-The Look step is grouped into **collapsible cards** (tap a card's header to fold/unfold it): **Layout &
-theme**, **Text & font**, **Note capture**, and **Scanning**.
+The Look step is grouped into **collapsible cards** (tap a card's header to fold/unfold it).
 
-![Step 1: Look](docs/img/config-look.png)
+| Layout & theme | Text & font · Note capture · Scanning |
+|---|---|
+| ![Look: Layout & theme](docs/img/config-look.png) | ![Look: the other cards](docs/img/config-look-2.png) |
 
-- **Layout - columns**: **1, 2 or 3** columns. Each column is an independent vertical stack, so
-  columns can have different heights.
-- **Vertical flow**: **Masonry** (each block takes its natural height) or **Fixed height** (each block
-  gets a set height and scrolls inside; collapsing a block keeps its slot so the grid stays aligned).
-- **Design**: nine themes, previewed on your own layout: **Ledger, Boxed, Airy, Grid (black), Grid
-  (grey), Compact, Card, Minimal, Underline**.
-- **Bubble**: House or Off.
+- **Layout & theme**: **1 / 2 / 3** columns (each an independent vertical stack); **vertical flow**
+  (Masonry = natural height, or Fixed height = a set height that scrolls inside); one of **9 designs**
+  (Ledger, Boxed, Airy, Grid black, Grid grey, Compact, Card, Minimal, Underline), previewed on your own
+  layout; and the **bubble** On / Off.
+- **Text & font**: **text size** and an independent **heading size** (S / M / L / XL); the **font**
+  (System default, or any `.ttf` / `.otf` you drop into `MyStyle/fonts`); and **block icons** show/hide.
+- **Note capture**: defaults for Clips & To-dos (the on-note **frame**, the **↩ source** link, and
+  **Handwriting / OCR text** with its pasted-text size & font). See the Note Clips and To-do modules.
+- **Scanning**: how often Stars/Keywords rescan (On open / Stale > 6h / Stale > 24h / Manual).
 
-![Step 1: sizes, font, clips frame, scanning](docs/img/config-look-2.png)
+### Sections
 
-- **Text size** (S / M / L / XL; bigger is easier for finger taps) and an independent **heading size**
-  for the section titles.
-- **Font**: **System default**, or any `.ttf` / `.otf` you drop into **`MyStyle/fonts`** (it applies
-  to the dashboard text).
-- **Block icons**: show or hide each block's type emoji on its title.
-- **Note Clips**: the optional capture **frame**: No frame / Grey / Black (see section 9).
-- **Scanning** (stars & keywords): On open / Stale > 6h / Stale > 24h / Manual (see section 11).
+Place blocks per column. **＋ add block** offers every module type (including **Contents** and
+**To-do**); **▲▼** reorder, **◀▶** move between columns, **🔧** configures a block inline, **✕** removes
+it, **✎** edits its displayed title (leave blank to hide it). A live preview sits on top.
 
-### Step 2 - Sections
-
-![Step 2: Sections](docs/img/config-sections.png)
-
-A **live preview** of your page, then one list per column. **＋ add block** opens a menu of block
-types (Shortcuts, Files, Search, Contents, Recent, Stars, Keywords, Clock, Device, Apps, Clips, To-do,
-plus an **Empty** spacer to reserve space); you can have **several of the same kind**. Each block has
-controls:
-
-- **▲ ▼** reorder within the column
-- **◀ ▶** move it to the previous / next column
-- **🔧** configure it inline (its options appear right there)
-- **✕** remove it
-- **✎ edit** the block's displayed title (leave it blank to hide the title)
-
-In a 1 or 2 column layout the block name and its controls sit on one line; with 3 columns they stack.
+| Columns & controls | The add-block menu |
+|---|---|
+| ![Sections](docs/img/config-sections.png) | ![Add block](docs/img/config-addblock.png) |
 
 ---
 
-## 5. Search
+## 4. The modules
 
-![Search results](docs/img/search.png)
+Each module is a block you add in **Sections**. Arrange any number of them across your columns; any
+titled block **collapses** to its title (▾ / ▸). Here's what each one does.
 
-The Search block searches **file & folder names** plus **keywords** (and, when enabled, note
-**headings**) from your scanned notes, and groups results into **Notes / PDFs / other docs / Folders /
-Keywords / Titles**. Tap a result to open it (a keyword or heading opens its exact page). Turn on
-**"Also search note titles"** in the block's 🔧 settings to include headings; the first indexing runs
-from there, then notes you change are re-indexed when you open the dashboard. A small **grammar** (shown
-under the box) refines the query:
+### 🔗 Shortcuts
+
+One-tap openers for the folders, notes, PDFs, EPUBs and comics (CBZ/XPS/FB2) you use most; each opens
+**on the right page**. Add them with the multi-select browser (section 6); show them as a list, a grid,
+or inline.
+
+### 📁 Files
+
+A small **file browser** inside the dashboard: walk your folders and open any note or document without
+leaving the dashboard.
+
+![Files module](docs/img/mod-files.png)
+
+### 🔍 Search
+
+Type to find **file & folder names**, **keywords**, and (when enabled) **note headings**, grouped into
+Notes / PDFs / other docs / Folders / Keywords / Titles. Tap a result to open it (a keyword or heading
+lands on its exact page). See the grammar in section 6.
+
+Turn on **"Also search note titles"** in the block's **🔧** to include headings. Titles need a one-time
+**OCR index** (built with **Index titles now**); it's incremental, so later runs only re-read pages you
+changed, and notes you edit are refreshed when you next open the dashboard.
+
+| Title results (`title:` / free text) | Enabling title search (🔧) |
+|---|---|
+| ![Search: title results](docs/img/mod-search-titles.png) | ![Search config](docs/img/search-config.png) |
+
+### ≣ Contents
+
+An outline of the **current note's headings** (the note open behind the dashboard); tap a heading to
+jump to its page. The header shows the note's name. Titles carry no text on the device, so each is
+**OCR'd once and cached per page**: an unchanged note appears instantly, only edited pages are re-read.
+Converted (typewritten) titles are read directly, and headings from older notes are included. In **🔧**
+you can map each of the four Supernote title styles to an **indent level**. The same index powers
+note-title search (above).
+
+| The outline (indented) | Indent mapping (🔧) |
+|---|---|
+| ![Contents module](docs/img/mod-contents.png) | ![Contents config](docs/img/contents-config.png) |
+
+### 🗒 Recent
+
+Your recently-used notes & documents. On Chauvet 3.29.43 / 2.26.40+ the device's recently-**opened**
+list is outside the plugin sandbox, so Recent shows the recently-**modified** notes/documents under
+`/Note` and `/Document`, newest first. Choose how many to show (**4 / 8 / 12 / 16 / 20**) in **🔧**.
+
+### ★ Stars
+
+Every starred (★) page from the last scan, grouped by note. A per-star **line preview** is optional
+(handwriting image, or text: typewritten lines read directly, handwriting OCR'd, image fallback). Tap to
+open the page; **✕★** deletes a single star from the note.
+
+![Stars module](docs/img/mod-stars.png)
+
+### # Keywords
+
+Your notes' keywords as tappable **chips**, grouped by keyword; each chip opens that exact note **on its
+page**.
+
+![Keywords module](docs/img/mod-keywords.png)
+
+### 🕑 Clock
+
+Time, date, week number and extra time zones. Faces: **Large, Compact, Weekday, Jumbo, Digital** (a real
+7-segment display, bundled so it works offline) and **Stamp**. 12 / 24-hour; optional **date**; optional
+**week number** in **ISO** (Mon) or **US** (Sun); a **region format** for date order & names; and any
+number of **extra time zones**, each a label plus a +/- hour offset from local time (the ½ control adds
+30-minute zones).
+
+![Clock config](docs/img/clock-config.png)
+
+### 🔋 Device
+
+Battery, free storage (internal + SD card) and a library stats line (notes / PDFs / stars / keywords).
+Each part can be toggled in **🔧**.
+
+![Device module](docs/img/mod-device.png)
+
+### ▦ Apps
+
+Buttons that launch device apps (ToDo, Calendar, Document, Files, or any installed app) via their
+exported activities. Pick them with the multi-select picker (section 6).
+
+### ✂ Note Clips
+
+Pin a snippet of a note onto the dashboard. In a **note**, lasso a region and tap **"Dashboard Clip"**
+in the lasso toolbar: it's captured **silently** (no view opens) and appears as a thumbnail in a **Clips**
+block. **Tap the content** to jump back to its source page (the backlink **follows the page** even if you
+reorder it or move it to another note).
+
+![Clips module](docs/img/mod-clips.png)
+
+- **Auto-label by underlining**: lasso a snippet with a word **underlined with the straight-line tool**
+  and that word becomes the clip's **label** automatically (on-device, no delay when there's no
+  underline). Manage labels with **🏷**; filter the block by label chips (they combine with OR) or by
+  source folder; sort Newest / Oldest / Label / Note (by **Note** groups under a per-note header); set
+  thumbnail size S / M / L.
+- **OCR to text (optional)**: turn on **OCR text** in Look → Note capture. Recognition runs in the
+  **background** after capture; each block then shows **Handwriting / OCR text / Both**. A pasted OCR
+  clip becomes an **editable text box** in your chosen font & size.
+- **Paste back into a note** with **📋 Paste** (a handwriting clip as an image, an OCR clip as a text
+  box), each with a small **↩ source** link under it. Move / resize by lassoing it; a pasted image is
+  removed by lasso-select → Delete (the eraser doesn't remove images).
+- **On-note frame (optional)**: a grey or black rectangle drawn around what you captured, so the note
+  shows what was clipped. It's permanent (deleting the clip doesn't erase it).
+
+| The clip marked on the note (frame + underlined label) | An OCR clip pasted back as a text box |
+|---|---|
+| ![Clip marked on the note](docs/img/note-marks.png) | ![Clip pasted](docs/img/clip-paste.png) |
+
+Notes only (no PDF lasso); up to **200** clips (oldest drop off).
+
+### ☑ To-do
+
+A to-do is a clip captured as a **task**. In a note, lasso it and tap the second lasso button,
+**"Dashboard To-do"**: the area gets a frame with a small **tick-box** in its corner and a **"#N"** tag,
+and the task appears in a **To-do** block with **Open / Done** tabs.
+
+| Open (a task with labels + OCR) | Done (struck through) |
+|---|---|
+| ![To-do open](docs/img/mod-todo-open.png) | ![To-do done](docs/img/mod-todo-done.png) |
+
+Checking works **both ways**:
+
+- **In the dashboard**: tap the checkbox. The plugin draws the ✓ inside the box **on the note**; untick
+  and it erases it.
+- **By hand on the note**: draw a check in the box, then tap **"↻ Check notes"** on the To-do block (or
+  **↻ Refresh all**). The dashboard marks it done and **replaces your hand-drawn check with its own** ✓
+  (so a later dashboard untick can clear it). This runs for the **note you have open**, and it's manual
+  so opening the dashboard stays fast. **Un-checking is done from the dashboard.**
+
+| The to-do marked on the note (empty box + #9) | The same box, checked from the dashboard |
+|---|---|
+| ![To-do mark](docs/img/note-marks.png) | ![To-do checked](docs/img/note-todo-checked.png) |
+
+Finished tasks are **kept** (never auto-deleted) and don't count against the 200-clip cap; **🗑 Clear
+done** removes them. Deleting a to-do removes only its **"#N"** tag from the note (quick, expected page
+only), leaving the frame so the page still shows it was a task. If you cut a marked area to **another
+page or note**, checking it offers an **on-demand search** (this note, then all notes, newest first,
+with a **Stop**) to find its "#N" again.
+
+Its **🔧** options mirror Clips (layout, size, sort, display, folder / label filters):
+
+![To-do config](docs/img/todo-config.png)
+
+### ▭ Empty
+
+A spacer to reserve vertical space or line up columns.
+
+---
+
+## 5. Save / load configurations
+
+The header's **▤ Save/load config** saves your whole dashboard under a name and reloads it anytime;
+handy before experimenting, or to recover after an accidental **↺ Reset all**. Profiles live in
+`MyStyle/Plugins/Dashboard/profiles.json`.
+
+---
+
+## 6. Reference
+
+### Search grammar
+
+A small grammar (shown under the search box) refines the query:
 
 | Type | Means |
 |---|---|
@@ -184,254 +291,53 @@ under the box) refines the query:
 | `type:note` `type:pdf` `type:doc` `type:folder` | keep only that kind |
 | `approx:` | typo-tolerant (subsequence) match |
 
-In the block's **🔧**, you can scope Search to specific **folders** (leave empty to search the whole
-device).
+### Multi-select browser
 
----
-
-## 6. Stars: line preview & delete
-
-![Stars with line previews](docs/img/stars.png)
-
-Stars are the five-star pages from the last scan, grouped by note; each is a tappable row that opens
-its page. The block's **↻ refresh** is a small icon in its header. For each starred page you can
-optionally show what's written **on the star's line** (the block's **🔧** → Line preview):
-
-- **Off**: just `p.N`.
-- **Image**: the actual **handwriting** of the line (always legible).
-- **Text**: shows the line as text. **Typewritten** lines (text you typed or converted) are read
-  **directly**, so they are always exact. **Handwritten** lines are **OCR'd** where the recognizer can
-  read them, and it **falls back to the handwriting image** for any line it can't. Best of both.
-
-Turn on **Allow deleting** to get a **✕★** next to each star; it removes **just that five-star** (your
-handwriting is kept), after a confirmation.
-
-> The line preview OCRs/renders per star, so it makes the scan slower; it only runs for notes that
-> changed since the last scan.
-
----
-
-## 7. Clock
-
-![Clock faces](docs/img/clock-styles.png)
-
-![A Clock block's settings: style, time format, date, week number, region, extra time zones](docs/img/clock-config.png)
-
-A Clock block shows the time, and (optionally) the date and week number. In its **🔧**:
-
-- **Style**: **Large, Compact, Weekday, Jumbo, Digital** (a 7-segment display face) or **Stamp**.
-- **Time format**: 12-hour or 24-hour.
-- **Date**: show or hide.
-- **Week number**: Off, **ISO** (Monday-start, the European standard) or **US** (Sunday-start), shown
-  as `W##`.
-- **Extra time zones**: add a zone with a **label** (for example "New York") and a **+/- hour offset**
-  from your device's local time. Use the **-** and **+** buttons; the **½** button adds 30 minutes for
-  half-hour zones. Each extra zone shows its own time, with a small **+1 / -1** if it lands on a
-  different day.
-- **Region format**: how the date is written (day/month order and month names).
-
----
-
-## 8. Device status
-
-A Device block shows, each independently toggleable in its **🔧**:
-
-- **Battery**: charge percentage and whether it's charging.
-- **Storage**: free space on internal storage and on the SD card.
-- **Stats**: a quick tally of your library (notes, PDFs, stars, keywords).
-
----
-
-## 9. Note Clips
-
-![A note with two lassoed lines](docs/img/note-clip-source.png)
-
-Note Clips let you pin a snippet of a note onto the dashboard.
-
-1. In a **note**, lasso a region as usual.
-2. In the lasso toolbar, tap **"Dashboard Clip"**. It's captured **silently** (no plugin view
-   opens), so it never interrupts your writing. (The neighbouring **"Dashboard To-do"** button captures
-   it as a task instead: see section 9a.)
-3. The snippet appears as a thumbnail in a **Clips** block. **Tap it to jump back to its exact source
-   note and page.**
-
-**Auto-label by underlining.** When you lasso a snippet, if it contains a word **underlined with the
-straight-line tool** (the clean shape line, not a free-hand stroke), the plugin recognises that word
-on-device and uses it as the clip's **label** automatically; a toast confirms it (`✓ Added · <word>`).
-No underline means no OCR and no delay: an ordinary capture is untouched. You can always fix the label
-afterward with **🏷 Label**.
-
-**OCR clips to text (optional).** Turn on **OCR text** in Step 1 - Look : Note clips. Clips are still
-captured as handwriting and you keep control immediately; the recognition runs **in the background**
-right after each capture and stores the text on the clip (empty/failed OCR keeps the image, like the
-Stars text mode). Then, per Clips block, choose **Display: Handwriting / OCR text / Both** (block's
-**🔧**). Pasting an OCR clip inserts an **editable text box** instead of an image; its **font** (your
-MyStyle fonts) and **size** are set in Look : Note clips. If a block is set to OCR/Both but the global
-**OCR text** is off, the block editor shows a reminder (no text is produced until you enable it).
-
-![A Clips block's settings: display (handwriting / OCR text / both), size, sort, filters](docs/img/clips-config.png)
-
-Each clip is a small **card**: a header showing its **source note / page** and **labels**, and a body
-with the content and the actions. **Tap the header** to collapse or expand the card (per session), so a
-long list reads as a compact index. **Tap the content** to jump to the source page.
-
-![Clips on the dashboard: cards with source, labels, handwriting and OCR text](docs/img/clips-dashboard.png)
-
-![The block's label filter, several chips selected (OR)](docs/img/clips-filter.png)
-
-Managing clips (on the dashboard and in the Clips block's **🔧**):
-
-- **Display**: **Handwriting** (image), **OCR text**, or **Both** (needs global OCR on, above).
-- **Label filter (in the block header)**: chips list every label present in the block, plus a grey
-  **no label** chip. Tap chips to show only matching clips; **several chips combine with OR** (any of
-  them). Tap again to deselect; none selected shows all.
-- **🏷 Label**: add or remove labels on a clip; it reuses labels you already created, so they stay
-  consistent.
-- **Filter (in config)** a Clips block by **source folder** and/or **label**, so you can have several
-  Clips blocks, each showing a different set.
-- **Sort**: Newest, Oldest, by Label, or by Note. **By Note** groups the clips under a per-note header
-  (the same layout as the Stars block).
-- **Thumbnail size**: Small, Medium or Large. A clip is never shown larger than the original snippet.
-  (In a 2- or 3-column dashboard, clips fill the block's full width.)
-- **Frame** (chosen in Step 1 - Look): optionally draw a **grey** or **black** rectangle on the note
-  around what you captured, so you can see on the note what was clipped. That mark is a permanent part
-  of the note (deleting the clip does not erase it).
-- **✕ Delete**: removes the clip from the dashboard (after a confirmation). It's pushed to the far
-  right of the row so you won't hit it by accident.
-
-### Pasting a clip back into a note
-
-Tap **📋 Paste** on a clip to drop it into the note you currently have open (open the note first, then
-raise the dashboard from the bubble). A handwriting clip is inserted **as an image**; an OCR clip is
-inserted **as an editable text box** (in your chosen font and size). Both land **centred on the page**,
-with a small **"↩ source" link** just under them that jumps back to the note and page the clip came
-from.
-
-![An OCR clip pasted as an editable text box, with its "↩ source" backlink](docs/img/clip-paste.png)
-
-- **Moving / resizing**: lasso the pasted element and drag or scale it. A text box stays editable.
-- **Deleting**: an inserted **image** is not removed by the **eraser** (the eraser removes handwriting
-  and text boxes, not images); to remove it, **lasso-select it and choose Delete**. A pasted **text
-  box** can be erased or lasso-deleted like any text box. This is standard Supernote behaviour.
-- **The backlink follows the page.** The dashboard thumbnail follows the source page even if you later
-  **reorder** it, or **move it to another note**: the plugin reads the note's stable page IDs from the
-  `.note` file and re-resolves the current location on the fly, self-healing the stored pointer when a
-  page has moved. The inserted **"↩ source"** link is a native Supernote link, so the firmware follows
-  it within the note too.
-- **First open after a cross-note move is a little slower** (the plugin scans recent notes to find where
-  the page went), then instant afterward. If a page is deleted outright, the pointer falls back to the
-  page number captured at clip time.
-
-Good to know: up to **200** clips are kept (the oldest drop off after that); capture works on **notes
-only** (the lasso toolbar isn't available in PDFs); and pasting is available in **notes only** too.
-
----
-
-## 9a. To-dos
-
-A **to-do** is a clip captured as a **task**. In a note, lasso it and tap the second lasso button,
-**"Dashboard To-do"** (next to "Dashboard Clip"). The area gets a frame with a small **tick-box** in its
-top-left corner and a **"#N"** tag, and the task shows up in any **To-do** block. That tick-box and "#N"
-are how the plugin re-finds the task on the page, so they're always drawn (regardless of the clip frame
-setting in Look).
-
-You can check a to-do **from either side**:
-
-- **In the dashboard**: tap its checkbox. The plugin draws the ✓ inside the box **on the note**; untick
-  and it erases it.
-- **By hand on the note**: draw a check in the box, then tap **"↻ Check notes"** on the To-do block (or
-  **↻ Refresh all**). The dashboard marks it done and **replaces your hand-drawn check with its own** ✓
-  (so a later dashboard untick can clear it). This runs for the **note you have open**, and it's manual
-  so opening the dashboard stays fast. **Un-checking is done from the dashboard.**
-
-The To-do block has **Open / Done** tabs, can group by note and filter by label, and offers **🗑 Clear
-done**. Finished tasks are **kept** (never auto-deleted) and don't count against the 200-clip cap.
-Deleting a to-do removes only its **"#N"** tag from the note (quick, on its expected page), leaving the
-frame so the page still shows it was a task.
-
-If you cut a marked area to **another page or note**, checking it offers an **on-demand search** (this
-note, then all notes, newest first, with a **Stop**) to find its "#N" again and sync.
-
-## 9b. Contents
-
-The **Contents** block shows the **current note's headings** (Supernote "Title" elements) as a tappable
-outline: tap a heading to jump to its page. The block header shows the note's name. Titles carry no text
-on the device, so each heading is **OCR'd** the first time and **cached per page**: a note you haven't
-changed appears instantly, and only pages you edit are re-read. Converted (typewritten) titles are read
-directly, and headings from older notes are included too. In the block's **🔧** you can map each of the
-four title styles to an **indent level**.
-
-The same headings power **note-title search**: turn on **"Also search note titles"** in a **Search**
-block (section 5). The first indexing runs from there; afterwards, notes you change are re-indexed when
-you open the dashboard.
-
----
-
-## 10. Save / load configurations
-
-The header's **▤ Save/load config** saves your whole dashboard under a name and reloads it anytime;
-handy before experimenting, or to recover after an accidental **↺ Reset all**. Profiles live in
-`MyStyle/Plugins/Dashboard/profiles.json`.
-
----
-
-## 11. Scanning (stars & keywords)
-
-Stars and Keywords come from scanning your notes. Each block shows its **last scan** time and a **↻**
-in its header; **↻ Refresh all** (dashboard header) refreshes every block. The scan is **incremental**:
-the first scan of a folder set is slow, but afterwards only files you've **edited** are re-scanned, so
-later scans are near-instant. Blocks that scan the **same folders** share one scan. Set how often it
-runs automatically in Step 1 - Look (On open / Stale > 6h / Stale > 24h / Manual). Tip: point
-Stars/Keywords at `/Note` (or a subfolder) rather than the whole device for speed.
-
-A **manual ↻ Refresh** also saves the note you have open underneath, so a star or keyword you *just*
-added on the current page shows up straight away; no need to turn the page first.
-
----
-
-## 12. Adding shortcuts (multi-select browser)
-
-**＋ Add folder / note / PDF / EPUB** opens a **full-page browser**: navigate anywhere, tap
-notes/PDFs/EPUBs to select several at once, **＋** a folder to add it, then **Save (N)** adds them
-all in one go. The same browser (folders only) picks the **scan folders** of Stars/Keywords/Search
-blocks, and the **apps picker** works the same way: tick several apps, then **Save (N)**.
+**＋ Add folder / note / PDF / EPUB** (Shortcuts), the **scan folders** picker (Stars / Keywords /
+Search / Clips / To-do) and the **apps** picker all use a full-page browser: navigate, tick several
+items, then **Save (N)** adds them at once.
 
 ![Add shortcuts](docs/screenshots/browser-multiselect.png)
 
+### Scanning (stars & keywords)
+
+Stars and Keywords come from scanning your notes. Each block shows its **last scan** time and a **↻** in
+its header; **↻ Refresh all** refreshes everything. The scan is **incremental**: the first scan of a
+folder set is slow, later ones only re-read files you've **edited**. Blocks over the **same folders**
+share one scan. A **manual ↻ Refresh** also saves the note open underneath, so a star/keyword you *just*
+added on the current page shows up without turning the page. Tip: point scans at `/Note` (or a subfolder)
+rather than the whole device for speed.
+
+### Advanced
+
+The whole configuration is a JSON file at **`MyStyle/Plugins/Dashboard/config.json`**; power users can
+edit it directly (the wizard writes the same file). Scan caches, the title (Contents) cache, star
+line-preview images and clip thumbnails live in the plugin's private folder, so they aren't
+cloud-synced and are cleaned up automatically.
+
 ---
 
-## 13. Advanced
-
-The whole configuration is a JSON file at **`MyStyle/Plugins/Dashboard/config.json`**; power users
-can edit it directly. The wizard writes the same file. (Scan caches, star line-preview images and clip
-thumbnails live in the plugin's private folder instead, so they aren't synced to the cloud and are
-cleaned up automatically.)
-
----
-
-## 14. Good to know / limits
+## 7. Good to know / limits
 
 - **Page jump**: notes, PDFs, EPUBs and comics open **on the target page** (a star's page, a keyword's
-  page, a shortcut's saved page, or a clip's source page) via the firmware's file opener.
-- **Recent on Chauvet 3.29.43 / 2.26.40+**: the device's recently-opened list (`/Recent`) is outside
-  the plugin's file sandbox there, so Recent shows recently-**modified** notes/documents instead.
+  page, a shortcut's saved page, a clip's or heading's source page) via the firmware's file opener.
+- **Recent on Chauvet 3.29.43 / 2.26.40+**: the device's recently-opened list (`/Recent`) is outside the
+  plugin's file sandbox there, so Recent shows recently-**modified** notes/documents instead.
 - **Stars/keywords in PDFs/EPUBs** aren't listed (the system only exposes them for notes).
-- **Note Clips** capture works in **notes only** (no PDF lasso), and a clip's optional on-note frame is
-  permanent.
+- **Note Clips / To-dos** capture works in **notes only** (no PDF lasso); a clip's optional on-note
+  frame is permanent.
 - **To-dos**: checking is two-way, but **un-checking is done from the dashboard** (a hand-drawn check is
   detected on **↻ Check notes** / **Refresh all**, for the note you have open, and replaced with the
   plugin's own tick so it can be cleared). On a note whose page size is unusual, a check drawn from the
   dashboard onto a page you're **not** currently viewing may land imperfectly; check from the open note
   or by hand there.
 - **Contents / title search** are OCR-based and cached: a heading appears once its page has been read
-  (the current note is read when you open Contents; the library is indexed from a Search block and
-  refreshed for notes you change). Handwriting OCR can occasionally misread a heading.
-- **New stars/keywords** on the page you're editing show up when you tap **↻ Refresh** (it saves the
-  open note first). Without a manual refresh they appear after you **turn the page** (the editor saves
-  on page-turn/close).
-- **Stray bubble**: removing the plugin clears its bubble automatically. If one ever lingers (for
-  example after a reinstall), open the plugin once; it clears leftover bubbles; set **Bubble = Off** in
-  Settings → Look, or reboot.
+  (the current note when you open Contents; the library from a Search block, refreshed for notes you
+  change). Handwriting OCR can occasionally misread a heading.
+- **New stars/keywords** on the page you're editing show up on a **manual ↻ Refresh** (which saves the
+  open note); an auto-scan alone sees them after a page-turn (when the editor saves).
+- **Stray bubble**: removing the plugin clears its bubble. If one ever lingers (e.g. after a reinstall),
+  open the plugin once (it clears leftovers), set **Bubble = Off**, or reboot.
 
 ---
 
