@@ -173,6 +173,8 @@ or select printed text from the document's selection toolbar. PDF / EPUB capture
 (nothing is drawn on the document; the **↩ source** backlink still returns you to the page). Up to 200
 clips.
 
+![The lasso menu: Dashboard Clip (scissors) and Dashboard To-do (checkbox)](docs/img/lasso-menu.png)
+
 ![Note lassoed for a clip](docs/img/note-clip-source.png)
 
 ![Clips on the dashboard: cards, labels, handwriting + OCR text, label filter](docs/img/clips-dashboard.png)

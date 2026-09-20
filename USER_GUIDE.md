@@ -257,6 +257,11 @@ which follows the page even if you reorder it or move it to another note. **PDF 
 dashboard-only**: nothing is drawn on the document (a PDF can't take the plugin's marks), and a text
 selection is stored without a thumbnail; the **↩ source** link still returns you to the exact page.
 
+The two capture buttons sit in the lasso menu with distinct icons: scissors for **Dashboard Clip**, a
+checkbox for **Dashboard To-do** (on a PDF, they also appear in the text-selection toolbar).
+
+![The lasso menu: Dashboard Clip (scissors) and Dashboard To-do (checkbox)](docs/img/lasso-menu.png)
+
 | The Clips block | Its configuration |
 |---|---|
 | ![Clips module](docs/img/mod-clips.png) | ![Clips config](docs/img/clips-config.png) |
