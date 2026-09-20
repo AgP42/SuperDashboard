@@ -9,7 +9,9 @@ clock, device status, app launchers, and Note Clips and To-dos (captured from no
 EPUBs). Lay them out in 1, 2 or 3 columns, in the design and font you like. It runs **fully on-device and
 offline**: no account, no network.
 
-![The dashboard](docs/img/dashboard-hero2.png)
+| A note page: a star, a clip, a to-do | The dashboard it builds |
+|---|---|
+| ![A source note page](docs/img/note-source.png) | ![The dashboard](docs/img/dashboard-hero2.png) |
 
 ### Which version do I need?
 
