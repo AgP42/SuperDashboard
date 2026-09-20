@@ -178,7 +178,9 @@ Supernote title style, mapping Style 1 (black), 2 (gray/white), 3 (gray/black), 
 **Good to know:** on Chauvet 3.29.43 / 2.26.40+ this shows recently-*modified* files (the recently-opened
 list is outside the plugin's sandbox there).
 
-![Recent module](docs/img/mod-recent.png)
+| The Recent block | Its configuration |
+|---|---|
+| ![Recent module](docs/img/mod-recent.png) | ![Recent config](docs/img/recent-config.png) |
 
 ### ★ Stars
 
@@ -229,6 +231,8 @@ notes, PDFs, stars, keywords).
 **What it does:** buttons that launch device apps (ToDo, Calendar, Files, or any installed app).
 **How to configure:** add with **＋ Apps** (tick from Supernote apps or "Show all apps", then Save).
 Reorder ▲▼, remove ✕. Layout Inline / Grid / List.
+
+![Apps config](docs/img/apps-config.png)
 
 ### ✂ Note Clips
 
