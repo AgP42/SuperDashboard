@@ -33,13 +33,6 @@ Blocks arrange in 1 / 2 / 3 columns (masonry or fixed height), collapse to their
 **ⓘ** help button in Settings. The **[User Guide](USER_GUIDE.md)** explains how every module works and
 how to configure it.
 
-### How it works
-
-Lasso a star, a clip or a task on any note and it lands on the dashboard above, labelled and linked back
-to its source page:
-
-![A note page: a star, a clip, a to-do](docs/img/note-source.png)
-
 ## Which version do I need?
 
 Supernote's firmware is called **Chauvet**; what matters is the version number. A build made for one

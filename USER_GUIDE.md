@@ -127,7 +127,7 @@ handy before experimenting, or to recover after an accidental **↺ Reset all**.
 Each module is a block you add in **Sections**. Add any number of them across your columns. Below: what
 each one does and how to configure it.
 
-### 🔗 Shortcuts
+### 4.1 🔗 Shortcuts
 
 **What it does:** one-tap openers for the folders, notes, PDFs and EPUBs you use most; each opens on its
 saved page.
@@ -136,7 +136,7 @@ remove with ✕. Layout: List, Grid (tiles) or Inline (wrapping chips).
 
 ![Shortcuts config](docs/img/shortcuts-config.png)
 
-### 📁 Files
+### 4.2 📁 Files
 
 **What it does:** a file browser inside the dashboard: walk your folders and open any note or document
 without leaving it.
@@ -146,7 +146,7 @@ without leaving it.
 |---|---|
 | ![Files module](docs/img/mod-files.png) | ![Files config](docs/img/files-config.png) |
 
-### 🔍 Search
+### 4.3 🔍 Search
 
 **What it does:** finds file & folder names, keywords, and (optionally) note headings; tap a result to
 open it on its page.
@@ -160,7 +160,7 @@ re-running it after adding notes is fast.
 |---|---|
 | ![Search: title results](docs/img/mod-search-titles.png) | ![Search config](docs/img/search-config.png) |
 
-### ≣ Contents
+### 4.4 ≣ Contents
 
 **What it does:** an outline of the headings in the note open behind the dashboard; tap one to jump to
 its page.
@@ -174,7 +174,7 @@ Supernote title style, mapping Style 1 (black), 2 (gray/white), 3 (gray/black), 
 |---|---|
 | ![Contents module](docs/img/mod-contents.png) | ![Contents config](docs/img/contents-config.png) |
 
-### 🗒 Recent
+### 4.5 🗒 Recent
 
 **What it does:** your recently-modified notes and documents, newest first.
 **How to configure:** count **4 / 8 / 12 / 16 / 20**; Layout List / Grid / Inline.
@@ -185,7 +185,7 @@ list is outside the plugin's sandbox there).
 |---|---|
 | ![Recent module](docs/img/mod-recent.png) | ![Recent config](docs/img/recent-config.png) |
 
-### ★ Stars
+### 4.6 ★ Stars
 
 **What it does:** every starred (★) page from the last scan, grouped by note.
 **How to configure:** folders to scan (empty = whole device); Note order By date / By name; Line preview
@@ -197,7 +197,7 @@ Off / Image / Text (OCR); "Allow deleting a star" adds a **✕★** to remove a 
 |---|---|
 | ![Stars module](docs/img/mod-stars.png) | ![Stars config](docs/img/stars-config.png) |
 
-### # Keywords
+### 4.7 # Keywords
 
 **What it does:** your notes' keywords as tappable chips; each opens its note on the right page.
 **How to configure:** folders to scan (empty = whole device); Note order By date / By name; Group by
@@ -208,7 +208,7 @@ all" clears the filter.
 |---|---|
 | ![Keywords module](docs/img/mod-keywords.png) | ![Keywords config](docs/img/keywords-config.png) |
 
-### 🕑 Clock
+### 4.8 🕑 Clock
 
 **What it does:** time, date, week number and extra time zones, in a choice of faces.
 **How to configure:** Style (Large / Compact / Weekday / Jumbo / Digital 7-segment / Stamp); 24- or
@@ -219,7 +219,11 @@ all" clears the filter.
 |---|---|
 | ![Clock module](docs/img/mod-clock.png) | ![Clock config](docs/img/clock-config.png) |
 
-### 🔋 Device
+The available faces (Large, Compact, Weekday, Jumbo, Digital 7-segment, Stamp):
+
+![All clock faces](docs/img/clock-styles.png)
+
+### 4.9 🔋 Device
 
 **What it does:** battery, free storage and a library stats line.
 **How to configure:** toggle each line: Battery, Free storage (internal + SD card), Stats (counts of
@@ -229,7 +233,7 @@ notes, PDFs, stars, keywords).
 |---|---|
 | ![Device module](docs/img/mod-device.png) | ![Device config](docs/img/device-config.png) |
 
-### ▦ Apps
+### 4.10 ▦ Apps
 
 **What it does:** buttons that launch device apps (ToDo, Calendar, Files, or any installed app).
 **How to configure:** add with **＋ Apps** (tick from Supernote apps or "Show all apps", then Save).
@@ -237,7 +241,7 @@ Reorder ▲▼, remove ✕. Layout Inline / Grid / List.
 
 ![Apps config](docs/img/apps-config.png)
 
-### ✂ Note Clips
+### 4.11 ✂ Note Clips
 
 **What it does:** snippets you lassoed from notes, as labelled thumbnails; tap one to jump to its source
 page, or paste it back into a note.
@@ -277,7 +281,7 @@ toolbar:
 |---|---|
 | ![Clip marked on the note](docs/img/note-marks.png) | ![Clip pasted](docs/img/clip-paste.png) |
 
-### ☑ To-do
+### 4.12 ☑ To-do
 
 **What it does:** tasks you lassoed from notes; each is marked on the note with a **tick-box** and a
 **"#N"** tag.
@@ -303,7 +307,7 @@ don't count against the 200-clip cap; deleting one removes only its "#N" from th
 |---|---|
 | ![To-do mark](docs/img/note-marks.png) | ![To-do checked](docs/img/note-todo-checked.png) |
 
-### ▭ Empty
+### 4.13 ▭ Empty
 
 A spacer to reserve vertical space or line up columns.
 
