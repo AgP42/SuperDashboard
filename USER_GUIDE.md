@@ -262,6 +262,11 @@ checkbox for **Dashboard To-do** (on a PDF, they also appear in the text-selecti
 
 ![The lasso menu: Dashboard Clip (scissors) and Dashboard To-do (checkbox)](docs/img/lasso-menu.png)
 
+On a PDF or EPUB, selecting printed text brings up the same two buttons in the document's selection
+toolbar:
+
+![PDF selection toolbar with Dashboard To-do (checkbox) and Dashboard Clip (scissors)](docs/img/pdf-selection.png)
+
 | The Clips block | Its configuration |
 |---|---|
 | ![Clips module](docs/img/mod-clips.png) | ![Clips config](docs/img/clips-config.png) |

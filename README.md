@@ -175,6 +175,8 @@ clips.
 
 ![The lasso menu: Dashboard Clip (scissors) and Dashboard To-do (checkbox)](docs/img/lasso-menu.png)
 
+![PDF selection toolbar with Dashboard To-do (checkbox) and Dashboard Clip (scissors)](docs/img/pdf-selection.png)
+
 ![Note lassoed for a clip](docs/img/note-clip-source.png)
 
 ![Clips on the dashboard: cards, labels, handwriting + OCR text, label filter](docs/img/clips-dashboard.png)
