@@ -199,7 +199,9 @@ Off / Image / Text (OCR); "Allow deleting a star" adds a **✕★** to remove a 
 Keyword / Note; View List / Inline / By folder; **＋ Keyword** limits the block to chosen ones, "Show
 all" clears the filter.
 
-![Keywords module](docs/img/mod-keywords.png)
+| The Keywords block | Its configuration |
+|---|---|
+| ![Keywords module](docs/img/mod-keywords.png) | ![Keywords config](docs/img/keywords-config.png) |
 
 ### 🕑 Clock
 
