@@ -10,6 +10,23 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.1.0 — 2026-09-20
+
+### New
+- **Clip and capture to-dos from PDFs and EPUBs.** Two ways: **lasso your handwritten annotations**, or
+  **select printed text** and tap the button in the document's selection toolbar. Both file into the
+  dashboard with a **↩ source** backlink to the page (a text selection is stored as a text clip, no
+  thumbnail).
+
+### Changed
+- **Distinct toolbar icons** for the two capture buttons: scissors for **Dashboard Clip**, a checkbox for
+  **Dashboard To-do**, so they're easy to tell apart in the lasso and selection toolbars.
+- **PDF / EPUB captures are dashboard-only**: nothing is drawn on the document (a PDF can't take the
+  plugin's tick-box or "#N" handle), and a PDF/EPUB to-do is ticked in the dashboard, with no on-page mark
+  and no live note sync. On-page marks and two-way ticking remain a notes feature.
+
+---
+
 ## v2.0.2 — 2026-09-20
 
 ### New

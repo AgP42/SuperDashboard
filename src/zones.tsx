@@ -840,10 +840,11 @@ function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollap
   // Per-block display: 'hand' = image; 'ocr' = text (image fallback when no
   // text yet); 'both' = image + text. Paste follows the same preference.
   const hasText = !!(c.text && c.text.trim());
+  const hasImage = !!(c.png && c.png.trim()); // text-only clips (e.g. selected PDF text) have no thumbnail
   const wantsText = textMode === 'ocr' || textMode === 'both';
-  const showText = wantsText && hasText;
-  const showImage = textMode === 'hand' || textMode === 'both' || (textMode === 'ocr' && !hasText);
-  const preferText = showText; // paste as a text box only when we're showing text
+  const showText = (wantsText && hasText) || (!hasImage && hasText);
+  const showImage = hasImage && (textMode === 'hand' || textMode === 'both' || (textMode === 'ocr' && !hasText));
+  const preferText = showText || !hasImage; // no image → always paste as a text box
   const struck = onToggleDone && c.done ? ui.clipDoneText : null;
   const runPaste = async (pref: boolean) => {
     if (clipOpening) return; // same guard as open: both end by leaving the plugin
@@ -935,8 +936,10 @@ function ClipCard({c, ff, textMode, repaint, showNote, collapsed, onToggleCollap
           </TouchableOpacity>
           {/* Actions: Label / Paste on the left, delete ✕ pushed to the far right. */}
           <View style={{flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 6}}>
-            {textMode === 'both' && hasText ? (
+            {textMode === 'both' && hasText && hasImage ? (
               // 'both' shows image + text, so offer BOTH paste targets explicitly.
+              // Only when there IS an image: a text-only clip (e.g. PDF selection)
+              // must not offer "Paste Ink", which would always fail.
               <>
                 <TouchableOpacity onPress={() => runPaste(false)} hitSlop={{top: 10, bottom: 10, left: 8, right: 8}}>
                   <Text style={[ui.clipBtn, ff]}>📋 Paste Ink</Text>

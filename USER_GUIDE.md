@@ -5,8 +5,9 @@
 SuperDashboard adds a floating **house bubble** (and a toolbar button) to your Supernote. One tap opens
 a **dashboard you compose yourself** from **modules**: shortcuts, a file browser, search (names,
 keywords and note headings), a Contents outline of the note you're in, recent files, stars, keywords, a
-clock, device status, app launchers, Note Clips and To-dos. Lay them out in 1, 2 or 3 columns, in the
-design and font you like. It runs **fully on-device and offline**: no account, no network.
+clock, device status, app launchers, and Note Clips and To-dos (captured from notes, and from PDFs /
+EPUBs). Lay them out in 1, 2 or 3 columns, in the design and font you like. It runs **fully on-device and
+offline**: no account, no network.
 
 ![The dashboard](docs/img/dashboard-hero2.png)
 
@@ -238,16 +239,23 @@ Reorder ▲▼, remove ✕. Layout Inline / Grid / List.
 
 **What it does:** snippets you lassoed from notes, as labelled thumbnails; tap one to jump to its source
 page, or paste it back into a note.
-**How to capture:** in a note, lasso something and tap **"Dashboard Clip"** in the lasso toolbar; it's
-captured silently. **Underline a word** with the straight-line tool while clipping and it becomes the
-clip's **label** automatically.
+**How to capture (notes):** lasso something and tap **"Dashboard Clip"** in the lasso toolbar; it's
+captured silently. The two lasso buttons have distinct icons (scissors for **Clip**, a checkbox for
+**To-do**). **Underline a word** with the straight-line tool while clipping and it becomes the clip's
+**label** automatically.
+**How to capture (PDFs / EPUBs):** two ways. Lasso your **handwritten annotations** and tap **"Dashboard
+Clip"** (captures the ink you drew, like a note clip). Or **select printed text** in the document and tap
+**"Dashboard Clip"** in the text-selection toolbar (captures the text as a text-only clip). Either way
+the capture is silent.
 **How to configure:** Layout Grid / List; Thumbnail size S / M / L; Sort Newest / Oldest / Label / Note
 (Note groups clips under a per-note header); Display Handwriting / OCR text / Both; filter by source
 folders and/or labels.
 **Good to know:** Display OCR/Both needs **"OCR text"** on in Look : Note capture. **📋 Paste Ink** drops
-a handwriting clip back as **editable strokes** (move, resize, even rewrite it); an OCR clip pastes as an
-editable text box. Each gets a **↩ source** link back to where it came from, which follows the page even
-if you reorder it or move it to another note.
+a handwriting clip back as **editable strokes** (move, resize, even rewrite it); an OCR clip (and a PDF
+text clip) pastes as an editable text box. Each gets a **↩ source** link back to where it came from,
+which follows the page even if you reorder it or move it to another note. **PDF / EPUB captures are
+dashboard-only**: nothing is drawn on the document (a PDF can't take the plugin's marks), and a text
+selection is stored without a thumbnail; the **↩ source** link still returns you to the exact page.
 
 | The Clips block | Its configuration |
 |---|---|
@@ -261,15 +269,19 @@ if you reorder it or move it to another note.
 
 **What it does:** tasks you lassoed from notes; each is marked on the note with a **tick-box** and a
 **"#N"** tag.
-**How to capture:** in a note, lasso a task and tap **"Dashboard To-do"** (the second lasso button).
+**How to capture (notes):** lasso a task and tap **"Dashboard To-do"** (the second lasso button).
+**How to capture (PDFs / EPUBs):** same as clips, filed as a task: lasso an annotation, or select
+printed text, and tap **"Dashboard To-do"**.
 **How to configure:** Open / Done tabs, **"↻ Check notes"** (pull a hand-drawn check from the open
 note) and **"🗑 Clear done"**. Layout, Thumbnail size, Sort, Display and the folder / label filters work
 like Clips.
-**Good to know:** tick it in the dashboard to draw the check on the note; or tick it **by hand** on the
-note and it shows as done here after **↻ Check notes** (un-checking is done from the dashboard). You can
-**move** a marked to-do anywhere, even to another page or note: the plugin finds it again by its **#N**.
-Finished tasks are kept (never auto-deleted) and don't count against the 200-clip cap; deleting one
-removes only its "#N" from the note.
+**Good to know:** on a **note**, tick it in the dashboard to draw the check on the note; or tick it **by
+hand** on the note and it shows as done here after **↻ Check notes** (un-checking is done from the
+dashboard). You can **move** a marked to-do anywhere, even to another page or note: the plugin finds it
+again by its **#N**. On a **PDF / EPUB** a to-do is **dashboard-only**: nothing is drawn on the document
+and there's no live sync (the on-page tick-box + "#N" handle is a notes-only feature), so just tick it
+here; the **↩ source** link returns you to the page. Finished tasks are kept (never auto-deleted) and
+don't count against the 200-clip cap; deleting one removes only its "#N" from the note.
 
 | Open | Done (struck through) |
 |---|---|
@@ -332,10 +344,15 @@ and are cleaned up automatically.
 - **Recent on Chauvet 3.29.43 / 2.26.40+**: shows recently-*modified* notes/documents (the recently-opened
   list is outside the plugin's sandbox there).
 - **Stars/keywords in PDFs/EPUBs** aren't listed (the system only exposes them for notes).
-- **Note Clips / To-dos** capture works in **notes only** (no PDF lasso).
-- **To-dos**: checking is two-way, but **un-checking is done from the dashboard** (a hand-drawn check is
-  picked up on **↻ Check notes** / **Refresh all**, for the note you have open, and replaced with the
-  plugin's own tick so it can be cleared).
+- **Clips / To-dos on PDFs / EPUBs** are **dashboard-only**: capture by lasso (your annotations) or by
+  selecting printed text, but nothing is drawn on the document and PDF to-dos don't live-sync. On-page
+  marks and two-way ticking are a **notes** feature.
+- **EPUB backlinks** point to the page you captured from, but a reflowable EPUB re-paginates when you
+  change its font size or margins, so the **↩ source** link may land near, not exactly on, the original
+  spot. PDF and note backlinks are stable (a note's even survives page reordering, via its page id).
+- **To-dos (notes)**: checking is two-way, but **un-checking is done from the dashboard** (a hand-drawn
+  check is picked up on **↻ Check notes** / **Refresh all**, for the note you have open, and replaced with
+  the plugin's own tick so it can be cleared).
 - **Contents / title search** are OCR-based and cached: a heading appears once its page has been read;
   handwriting OCR can occasionally misread one.
 - **New stars/keywords** on the page you're editing show up on a **manual ↻ Refresh**; an auto-scan alone

@@ -8,7 +8,7 @@ import {AppRegistry, AppState, DeviceEventEmitter, Image, NativeModules, ToastAn
 import App from './App';
 import {name as appName} from './app.json';
 
-import {PluginManager, PluginCommAPI, PluginNoteAPI} from 'sn-plugin-lib';
+import {PluginManager, PluginCommAPI, PluginNoteAPI, PluginDocAPI} from 'sn-plugin-lib';
 import {setRoute} from './src/route';
 import {showBubbleFromConfig} from './src/bubble';
 import {hasSavedConfig, loadConfig} from './src/config';
@@ -145,6 +145,8 @@ PluginManager.registerPluginLifeListener({
 const TOOLBAR_BTN = 100;
 const LASSO_BTN = 200;
 const LASSO_TODO_BTN = 201;
+const SEL_BTN = 202; // DOC text-selection toolbar: clip selected PDF/EPUB text
+const SEL_TODO_BTN = 203; // DOC text-selection toolbar: file selected text as a to-do
 
 // ---- Note Clips: lasso → "Add to Dashboard" (headless capture) ------------
 // Native pen colours for the optional capture frame (dark grey / black).
@@ -255,6 +257,52 @@ async function drawClipFrame(rect, style, kind, markNum) {
     return null;
   }
 }
+
+/** Clip the SELECTED TEXT of a DOC (PDF/EPUB), from the selection toolbar, as a
+ *  text-only clip linked back to the document + page. `kind==='todo'` files it as a
+ *  dashboard-only task (no on-page mark: a PDF can't take our "#N" handle). */
+async function handleDocSelectionToClip(kind) {
+  try {
+    await ensureFilePermissions();
+    const path = unwrapR(await PluginCommAPI.getCurrentFilePath());
+    if (!path) {
+      ToastAndroid.show('Open a document first', ToastAndroid.SHORT);
+      return;
+    }
+    const pageRaw = unwrapR(await PluginCommAPI.getCurrentPageNum());
+    const page = typeof pageRaw === 'number' ? pageRaw : -1;
+    let text = '';
+    try {
+      text = unwrapR(await PluginDocAPI.getLastSelectedText()) || '';
+    } catch (e) {
+      blog(`[doc] getLastSelectedText: ${e && e.message}`);
+    }
+    text = (text || '').trim();
+    blog(`[doc] selection path=${path} page=${page} kind=${kind} textLen=${text.length}`);
+    if (!text) {
+      ToastAndroid.show('Select some text first', ToastAndroid.LONG);
+      return;
+    }
+    await addClip({
+      id: clipId(),
+      png: '', // text-only clip: no thumbnail
+      text,
+      sourcePath: path,
+      sourcePage: page,
+      w: 0,
+      h: 0,
+      labels: [],
+      kind: kind === 'todo' ? 'todo' : 'clip',
+      ...(kind === 'todo' ? {done: false} : {}),
+      createdAt: Date.now(),
+    });
+    ToastAndroid.show(kind === 'todo' ? '✓ To-do added' : '✓ Text clipped', ToastAndroid.SHORT);
+  } catch (e) {
+    blog(`[doc] handleDocSelectionToClip failed: ${e && e.message}`);
+    ToastAndroid.show('Clip failed', ToastAndroid.SHORT);
+  }
+}
+
 /** Save the current lasso selection as an image clip, backlinked to its page.
  *  Headless: no plugin view is opened (frictionless collection). */
 async function handleLassoToClip(kind) {
@@ -277,10 +325,16 @@ async function handleLassoToClip(kind) {
   try {
     await ensureFilePermissions();
     const path = unwrapR(await PluginCommAPI.getCurrentFilePath());
-    if (!path || !/\.note$/i.test(path)) {
-      ToastAndroid.show('Open a note to clip', ToastAndroid.SHORT);
+    // Allow PDF/EPUB (DOC), not just .note. Option A: a DOC capture never touches the
+    // page. Both DOC clips and DOC to-dos are dashboard-only (no frame, no tick-box,
+    // no "#N" handle -> no live sync). Only notes get on-page marks + live sync.
+    if (!path || !/\.(note|pdf|epub)$/i.test(path)) {
+      ToastAndroid.show('Open a note or document to clip', ToastAndroid.SHORT);
       return;
     }
+    const isNote = /\.note$/i.test(path);
+    // On a DOC (PDF/EPUB) the capture is dashboard-only: no on-page mark at all
+    // (Option A), so no live note sync. Only notes are marked and synced.
     // getCurrentPageNum and openFile share the firmware's page space, so we
     // round-trip the RAW value with no ±1 (SSN does the same). A conversion here
     // is what put the backlink one page early. -1 = "keep last-viewed" fallback.
@@ -330,7 +384,10 @@ async function handleLassoToClip(kind) {
     // regardless of the clip-frame preference).
     let frame = (cfg && cfg.clipFrame) || 'off';
     let rect = null;
-    if (frame !== 'off' || kind === 'todo') {
+    // On-page marks are NOTE-only (Option A: PDF/EPUB captures never touch the page).
+    // A note needs the lasso rect for a clip only when a frame style is set, and for
+    // a to-do always (its mark is drawn regardless of the clip-frame preference).
+    if ((frame !== 'off' || kind === 'todo') && isNote) {
       try {
         rect = unwrapR(await PluginCommAPI.getLassoRect());
       } catch (e) {
@@ -363,11 +420,17 @@ async function handleLassoToClip(kind) {
     // pruned it because insertSticker squashed on move; re-testing that on current
     // firmware.) It's cleaned up with the clip (deleteClip removes .png and .sticker).
 
-    // A to-do always gets a mark (its note<->dashboard handle), whatever the
-    // clip-frame setting; a plain clip only gets the frame when the user enabled it.
-    const frameStyle = kind === 'todo' && frame === 'off' ? 'grey' : frame;
-    const markNum = kind === 'todo' && rect ? await nextMarkNum() : undefined;
-    const boxRect = rect && (kind === 'todo' || frame !== 'off') ? await drawClipFrame(rect, frameStyle, kind, markNum) : null;
+    // On-page mark: NOTE only (Option A). A to-do always gets a frame + tick-box +
+    // "#N" (the "#N" is the durable note<->dashboard handle for live sync); a plain
+    // clip only gets the frame when enabled. On a DOC (PDF/EPUB) the capture never
+    // touches the page: both clips and to-dos are dashboard-only, no on-page mark.
+    let markNum;
+    let boxRect = null;
+    if (isNote) {
+      const frameStyle = kind === 'todo' && frame === 'off' ? 'grey' : frame;
+      markNum = kind === 'todo' && rect ? await nextMarkNum() : undefined;
+      boxRect = rect && (kind === 'todo' || frame !== 'off') ? await drawClipFrame(rect, frameStyle, kind, markNum) : null;
+    }
     // If the mark couldn't be drawn (e.g. label insert failed), don't persist a
     // dangling markNum with no handle on the page.
     const savedMarkNum = boxRect ? markNum : undefined;
@@ -443,12 +506,14 @@ PluginManager.registerButton(1, ['NOTE', 'DOC'], {
   showType: 1,
 });
 
-// Lasso toolbar button (NOTE only; DOC/PDF has no lasso plugin slot). showType:0
-// = headless: we capture in onButtonPress without opening the plugin view.
-PluginManager.registerButton(2, ['NOTE'], {
+// Lasso toolbar button. showType:0 = headless: we capture in onButtonPress
+// without opening the plugin view. Registered for DOC too: on a PDF/EPUB the lasso
+// captures the ANNOTATIONS you drew (verified on device); printed PDF text is
+// captured via the text-selection buttons below instead.
+PluginManager.registerButton(2, ['NOTE', 'DOC'], {
   id: LASSO_BTN,
   name: 'Dashboard Clip',
-  icon: Image.resolveAssetSource(require('./assets/icon.png')).uri,
+  icon: Image.resolveAssetSource(require('./assets/icon-clip.png')).uri,
   // Lasso data types that KEEP this button enabled: 0=stroke, 1=title,
   // 2=picture, 3=text, 4=link, 5=geometry. The firmware greys the button out if
   // the selection contains ANY type not listed here, so geometry (5) is
@@ -458,12 +523,28 @@ PluginManager.registerButton(2, ['NOTE'], {
   showType: 0,
 });
 
-// Same capture, filed as a task instead of a reference.
-PluginManager.registerButton(2, ['NOTE'], {
+// Same capture, filed as a task instead of a reference. On a DOC (PDF/EPUB) the
+// to-do is dashboard-only: no on-page mark, no live note sync (see handleLassoToClip).
+PluginManager.registerButton(2, ['NOTE', 'DOC'], {
   id: LASSO_TODO_BTN,
   name: 'Dashboard To-do',
-  icon: Image.resolveAssetSource(require('./assets/icon.png')).uri,
+  icon: Image.resolveAssetSource(require('./assets/icon-todo.png')).uri,
   editDataTypes: [0, 1, 2, 3, 4, 5],
+  showType: 0,
+});
+
+// DOC selection toolbar buttons — clip / file-as-to-do the currently selected
+// PDF/EPUB text (they appear when you highlight text, like the digest button).
+PluginManager.registerButton(3, ['DOC'], {
+  id: SEL_BTN,
+  name: 'Dashboard Clip',
+  icon: Image.resolveAssetSource(require('./assets/icon-clip.png')).uri,
+  showType: 0,
+});
+PluginManager.registerButton(3, ['DOC'], {
+  id: SEL_TODO_BTN,
+  name: 'Dashboard To-do',
+  icon: Image.resolveAssetSource(require('./assets/icon-todo.png')).uri,
   showType: 0,
 });
 
@@ -471,6 +552,10 @@ PluginManager.registerButtonListener({
   // Lasso button → capture a clip headlessly. Toolbar button → Dashboard (or the
   // Settings wizard on first open, where no config was ever saved).
   onButtonPress(e) {
+    if (e && (e.id === SEL_BTN || e.id === SEL_TODO_BTN)) {
+      handleDocSelectionToClip(e.id === SEL_TODO_BTN ? 'todo' : 'clip');
+      return;
+    }
     if (e && (e.id === LASSO_BTN || e.id === LASSO_TODO_BTN)) {
       handleLassoToClip(e.id === LASSO_TODO_BTN ? 'todo' : 'clip');
       return;

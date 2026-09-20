@@ -168,7 +168,10 @@ thumbnail **size** S / M / L (clips fill the full width in 2 or 3 column dashboa
 scaled larger than the original extract. The block header also has a live **label filter**: tap the
 label chips (they combine with **OR**), plus a grey **no label** chip. Optionally a thin **frame**
 (off / grey / black, set in Look) is drawn on the note around what you captured, as a permanent mark
-(removing the clip does not erase it). Notes only (PDF lasso isn't supported); up to 200 clips.
+(removing the clip does not erase it). You can also clip from **PDFs / EPUBs**: lasso your annotations,
+or select printed text from the document's selection toolbar. PDF / EPUB captures are dashboard-only
+(nothing is drawn on the document; the **↩ source** backlink still returns you to the page). Up to 200
+clips.
 
 ![Note lassoed for a clip](docs/img/note-clip-source.png)
 
@@ -199,6 +202,11 @@ If a marked area gets lasso-cut to another page or note, the dashboard offers an
 has **Open / Done** tabs, groups by note, filters by label, and a **🗑 Clear done**; finished tasks are
 kept (never auto-deleted) and are immune to the 200-clip cap. Deleting a to-do removes only its "#N"
 tag from the note (fast, expected page only), leaving the frame so the page still shows it was a task.
+
+You can also make a to-do from a **PDF / EPUB** (lasso an annotation, or select printed text, then tap
+**"Dashboard To-do"**). A PDF / EPUB to-do is **dashboard-only**: nothing is drawn on the document and
+there's no live sync (the on-page tick-box + "#N" handle is a notes-only feature), so tick it in the
+dashboard; the **↩ source** backlink returns you to the page.
 
 ### Contents
 
