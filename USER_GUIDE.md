@@ -134,7 +134,9 @@ saved page.
 **How to configure:** add with the **＋** (a browser: tick several items, then Save). Reorder with ▲▼,
 remove with ✕. Layout: List, Grid (tiles) or Inline (wrapping chips).
 
-![Shortcuts config](docs/img/shortcuts-config.png)
+| The Shortcuts block | Its configuration |
+|---|---|
+| ![Shortcuts module](docs/img/mod-shortcuts.png) | ![Shortcuts config](docs/img/shortcuts-config.png) |
 
 ### 4.2 📁 Files
 
@@ -239,7 +241,9 @@ notes, PDFs, stars, keywords).
 **How to configure:** add with **＋ Apps** (tick from Supernote apps or "Show all apps", then Save).
 Reorder ▲▼, remove ✕. Layout Inline / Grid / List.
 
-![Apps config](docs/img/apps-config.png)
+| The Apps block | Its configuration |
+|---|---|
+| ![Apps module](docs/img/mod-apps.png) | ![Apps config](docs/img/apps-config.png) |
 
 ### 4.11 ✂ Note Clips
 
