@@ -10,6 +10,13 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.1.1 — 2026-09-20
+
+### Changed
+- Shorter, more readable **"About this plugin"** description. No functional change from v2.1.0.
+
+---
+
 ## v2.1.0 — 2026-09-20
 
 ### New
