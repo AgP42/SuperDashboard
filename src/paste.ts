@@ -304,25 +304,103 @@ async function insertBacklink(clip: Clip, targetPath: string, currentPath: strin
   }
 }
 
+/** Bounding rect (page pixels) of the elements added since the `before` set of
+ *  numInPage, so the backlink can sit under a pasted sticker. insertSticker lands
+ *  its content as strokes/pictures/etc. with no single rect, so we diff the page.
+ *  Strokes are EMR (rotated 90° + x-flipped), converted with each element's own
+ *  maxX/maxY; pictures/text/geometry are already pixels. null if nothing new. */
+async function newElementsRect(path: string, page: number, pageSize: {width: number; height: number}, before: Set<number>): Promise<Rect | null> {
+  const W = (pageSize && pageSize.width) || 0;
+  const H = (pageSize && pageSize.height) || 0;
+  const els: any[] = unwrapR(await PluginFileAPI.getElements(page, path)) ?? [];
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  const add = (x: number, y: number) => {
+    if (x < x1) x1 = x;
+    if (y < y1) y1 = y;
+    if (x > x2) x2 = x;
+    if (y > y2) y2 = y;
+  };
+  try {
+    let scanned = 0;
+    for (const e of els) {
+      if (!e || (typeof e.numInPage === 'number' && before.has(e.numInPage))) continue;
+      if (e.type === 200 && e.picture?.rect) {
+        const r = e.picture.rect;
+        add(r.left, r.top);
+        add(r.right, r.bottom);
+      } else if ((e.type === 500 || e.type === 501 || e.type === 502) && e.textBox?.textRect) {
+        const r = e.textBox.textRect;
+        add(r.left, r.top);
+        add(r.right, r.bottom);
+      } else if (e.type === 700 && Array.isArray(e.geometry?.points)) {
+        for (const p of e.geometry.points) add(p.x, p.y);
+      } else if (e.type === 0 && e.stroke?.points && W && H && scanned < 400) {
+        const maxX = e.maxX || 0;
+        const maxY = e.maxY || 0;
+        if (!maxX || !maxY) continue;
+        scanned++;
+        try {
+          const acc = e.stroke.points;
+          const n = await acc.size();
+          if (!n) continue;
+          const pts: any[] = await acc.getRange(0, Math.min(n, 64));
+          for (const p of pts) add(W - (p.y / maxY) * W, (p.x / maxX) * H);
+        } catch {
+          /* skip stroke */
+        }
+      }
+    }
+  } finally {
+    for (const e of els) {
+      try {
+        e && e.recycle && e.recycle();
+      } catch {}
+    }
+  }
+  return isFinite(x1) ? {left: x1, top: y1, right: x2, bottom: y2} : null;
+}
+
 /** Paste the clip's .sticker (native ink) via insertSticker, into the current page.
- *  Returns false when there's no sticker (older clips) so the caller falls back to
- *  the PNG. Re-test of the historical "sticker squashes on move" firmware bug. */
-async function insertStickerClip(clip: Clip): Promise<boolean> {
+ *  Returns {ok, rect}: rect is the bounding box of the pasted ink (for the
+ *  backlink). ok:false when there's no sticker (older clips) so the caller falls
+ *  back to the PNG. */
+async function insertStickerClip(clip: Clip, path: string, page: number, pageSize: {width: number; height: number}): Promise<{ok: boolean; rect: Rect | null}> {
   const sticker = clip.png.replace(/\.png$/i, '.sticker');
   try {
     const exists = await DashboardNative?.fileExists?.(sticker);
     if (!exists) {
       plog('no .sticker for clip; falling back to image');
-      return false;
+      return {ok: false, rect: null};
+    }
+    // Snapshot the page's element ids so we can find what the sticker adds.
+    const before = new Set<number>();
+    try {
+      const els0: any[] = unwrapR(await PluginFileAPI.getElements(page, path)) ?? [];
+      for (const e of els0) {
+        if (typeof e?.numInPage === 'number') before.add(e.numInPage);
+        try {
+          e && e.recycle && e.recycle();
+        } catch {}
+      }
+    } catch {
+      /* best-effort */
     }
     const r: any = await PluginCommAPI.insertSticker(sticker);
     const ok = r === true || !!(r && r.success);
     plog(`insertSticker ok=${ok}`);
-    if (ok) await save();
-    return ok;
+    if (!ok) return {ok: false, rect: null};
+    await save();
+    let rect: Rect | null = null;
+    try {
+      rect = await newElementsRect(path, page, pageSize, before);
+    } catch {
+      /* backlink just falls back to page bottom */
+    }
+    plog(`sticker rect=${rect ? `[${rect.left | 0},${rect.top | 0},${rect.right | 0},${rect.bottom | 0}]` : 'null'}`);
+    return {ok: true, rect};
   } catch (e: any) {
     plog(`insertSticker threw: ${e && e.message}`);
-    return false;
+    return {ok: false, rect: null};
   }
 }
 
@@ -348,9 +426,20 @@ export async function pasteClip(clip: Clip, preferText = !!(clip.text && clip.te
 
     // OCR clip → editable text box. A handwriting clip → native sticker ink when we
     // have one (insertSticker), falling back to the twin-image paste otherwise.
-    const ok = asText
-      ? await insertLockedText(clip, pageSize, cfg)
-      : (await insertStickerClip(clip)) || (await insertLockedImage(clip, pageSize));
+    const pageNum = (unwrapR(await PluginCommAPI.getCurrentPageNum()) as number) ?? 0;
+    let ok: boolean;
+    let anchorRect: Rect | null = null;
+    if (asText) {
+      ok = await insertLockedText(clip, pageSize, cfg);
+    } else {
+      const s = await insertStickerClip(clip, path, pageNum, pageSize);
+      if (s.ok) {
+        ok = true;
+        anchorRect = s.rect; // the sticker's own bbox (getLastElement can't see it)
+      } else {
+        ok = await insertLockedImage(clip, pageSize);
+      }
+    }
     if (!ok) {
       ToastAndroid.show('Paste failed', ToastAndroid.SHORT);
       return;
@@ -360,8 +449,9 @@ export async function pasteClip(clip: Clip, preferText = !!(clip.text && clip.te
     // inserted element after a save.
     await save();
 
-    // Find where it landed so the backlink can sit right under it.
-    const anchorRect = await lastElementRectPx(pageSize);
+    // Find where it landed so the backlink can sit right under it (the sticker
+    // path already computed its rect; image/text read it back here).
+    if (!anchorRect) anchorRect = await lastElementRectPx(pageSize);
     // Resolve the source NOW (follow its PAGEID across reorder AND a move to
     // another note), so a re-paste points at the current note+page, not the
     // capture-time path/number. Self-heal the clip when the page has moved.
