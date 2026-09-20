@@ -1,7 +1,7 @@
 # SuperDashboard (Supernote plugin)
 
 A configurable, always‑available dashboard for Supernote e‑ink devices. Its face is a draggable
-**bubble** (⊕) that floats over everything; tap it to open the dashboard, drag it to move it.
+**bubble** (the house logo) that floats over everything; tap it to open the dashboard, drag it to move it.
 
 ![SuperDashboard demo](docs/dashboard-demo.gif)
 
@@ -24,11 +24,10 @@ line previews; the whole UI in a MyStyle font; and a different design with secti
 
 ## Which version do I need? (Supernote firmware)
 
-In August 2026 Supernote began rolling out **Chauvet 3.29.43** (Manta / Nomad) and **2.26.40**
-(A5 X / A6 X), which add a new plugin **permission system** and other breaking plugin‑API changes. It's
-a developer preview today and is expected to reach everyone soon. A build made for one firmware version
-does not run on the other, so pick the release that matches the version on your device (check it in the
-device settings):
+Supernote's **Chauvet 3.29.43** (Manta / Nomad) and **2.26.40** (A5 X / A6 X), rolled out from
+August 2026, add a new plugin **permission system** and other breaking plugin‑API changes. A build made
+for one firmware version does not run on the other, so pick the release that matches the version on your
+device (check it in the device settings):
 
 | Your Chauvet version | Download |
 |---|---|
@@ -38,12 +37,12 @@ device settings):
 Both builds are the same SuperDashboard. The Chauvet build is rebuilt for `sn-plugin-lib` 0.1.65; on
 first open it asks for **file access** (READ/WRITE) to scan your notes for stars/keywords and to remove a
 star; if you deny it, the launcher (shortcuts, apps, opening files/folders) still works, only the
-note‑scanning zones go empty. Once these firmware versions ship publicly, the Chauvet build becomes the
-main one. Installing the wrong build shows *"package not compatible"* or the plugin does nothing.
+note‑scanning zones go empty. Installing the wrong build shows *"package not compatible"* or the plugin
+does nothing.
 
 ## Permissions
 
-On the plugin‑preview firmware SuperDashboard declares two **plugin permissions** in
+On the Chauvet plugin‑permission firmware SuperDashboard declares two **plugin permissions** in
 `PluginConfig.json` (`uses-permissions`). They're requested once on first open and listed under
 **Settings → Apps → Plugins → SuperDashboard → Permissions**:
 
@@ -131,9 +130,10 @@ block has a small **ⓘ** with quick, precise help on its options.
 - **Device**: battery, free storage (internal + SD card) and a stats line (notes / pdf / stars /
   keywords counts); each part is toggleable.
 - **Apps**: launch device apps via exported‑activity intents.
-- **Note Clips**: snippets you lassoed from your notes, as labelled thumbnails (see below).
-- **To-do**: tasks you lassoed from your notes, each marked on the note with a tick-box you can check
-  from the dashboard or by hand (see below).
+- **Note Clips**: snippets you lassoed from notes (or PDFs / EPUBs, or selected PDF text), as labelled
+  thumbnails (see below).
+- **To-do**: tasks you captured from notes (or PDFs / EPUBs); a note task is marked with a tick-box you
+  can check from the dashboard or by hand, a PDF / EPUB task is dashboard-only (see below).
 - **Empty**: a spacer to reserve vertical space / line columns up.
 
 The **Stars** and **Keywords** blocks show their last‑scan time and a small **↻** in the block header
