@@ -115,6 +115,8 @@ The header's **▤ Save/load config** saves your whole dashboard under a name an
 handy before experimenting, or to recover after an accidental **↺ Reset all**. Profiles live in
 `MyStyle/Plugins/Dashboard/profiles.json`.
 
+![Save / load configuration](docs/img/save-load.png)
+
 ---
 
 ## 4. The modules
@@ -129,13 +131,17 @@ saved page.
 **How to configure:** add with the **＋** (a browser: tick several items, then Save). Reorder with ▲▼,
 remove with ✕. Layout: List, Grid (tiles) or Inline (wrapping chips).
 
+![Shortcuts config](docs/img/shortcuts-config.png)
+
 ### 📁 Files
 
 **What it does:** a file browser inside the dashboard: walk your folders and open any note or document
 without leaving it.
 **How to configure:** set the **Root folder** (✎ set) where the browser starts (default `/Note`).
 
-![Files module](docs/img/mod-files.png)
+| The Files block | Its configuration |
+|---|---|
+| ![Files module](docs/img/mod-files.png) | ![Files config](docs/img/files-config.png) |
 
 ### 🔍 Search
 
@@ -172,6 +178,8 @@ Supernote title style, mapping Style 1 (black), 2 (gray/white), 3 (gray/black), 
 **Good to know:** on Chauvet 3.29.43 / 2.26.40+ this shows recently-*modified* files (the recently-opened
 list is outside the plugin's sandbox there).
 
+![Recent module](docs/img/mod-recent.png)
+
 ### ★ Stars
 
 **What it does:** every starred (★) page from the last scan, grouped by note.
@@ -180,7 +188,9 @@ Off / Image / Text (OCR); "Allow deleting a star" adds a **✕★** to remove a 
 **Good to know:** Image/Text previews make the scan slower; scanning is incremental. Rescan with the
 **↻** in the block header.
 
-![Stars module](docs/img/mod-stars.png)
+| The Stars block | Its configuration |
+|---|---|
+| ![Stars module](docs/img/mod-stars.png) | ![Stars config](docs/img/stars-config.png) |
 
 ### # Keywords
 
@@ -198,7 +208,9 @@ all" clears the filter.
 12-hour; Date Show/Hide; Week number Off / ISO (Mon) / US (Sun); Region format (date order & names);
 **＋ add time zone** (label + offset with - / +, ½ adds 30 min; up to 6). A live preview is shown.
 
-![Clock config](docs/img/clock-config.png)
+| The Clock block | Its configuration |
+|---|---|
+| ![Clock module](docs/img/mod-clock.png) | ![Clock config](docs/img/clock-config.png) |
 
 ### 🔋 Device
 
@@ -206,7 +218,9 @@ all" clears the filter.
 **How to configure:** toggle each line: Battery, Free storage (internal + SD card), Stats (counts of
 notes, PDFs, stars, keywords).
 
-![Device module](docs/img/mod-device.png)
+| The Device block | Its configuration |
+|---|---|
+| ![Device module](docs/img/mod-device.png) | ![Device config](docs/img/device-config.png) |
 
 ### ▦ Apps
 
@@ -229,7 +243,9 @@ a handwriting clip back as **editable strokes** (move, resize, even rewrite it);
 editable text box. Each gets a **↩ source** link back to where it came from, which follows the page even
 if you reorder it or move it to another note.
 
-![Clips module](docs/img/mod-clips.png)
+| The Clips block | Its configuration |
+|---|---|
+| ![Clips module](docs/img/mod-clips.png) | ![Clips config](docs/img/clips-config.png) |
 
 | The clip marked on the note | An OCR clip pasted back |
 |---|---|
