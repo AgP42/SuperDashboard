@@ -88,7 +88,8 @@ The Look step is grouped into **collapsible cards** (tap a card's header to fold
 | ![Look: Layout & theme](docs/img/config-look.png) | ![Look: the other cards](docs/img/config-look-2.png) |
 
 - **Layout & theme**: **1 / 2 / 3** columns (each an independent vertical stack); **vertical flow**
-  (Masonry = natural height, or Fixed height = a set height that scrolls inside); one of **9 designs**
+  (Masonry = natural height, or Fixed height = a set height that scrolls inside — Short / Medium / Tall
+  or an exact px value, set per block); one of **9 designs**
   (Ledger, Boxed, Airy, Grid black, Grid grey, Compact, Card, Minimal, Underline), previewed on your own
   layout; and the **bubble** On / Off.
 - **Text & font**: **text size** and an independent **heading size** (S / M / L / XL); the **font**
@@ -313,7 +314,17 @@ don't count against the 200-clip cap; deleting one removes only its "#N" from th
 
 ### 4.13 ▭ Empty
 
-A spacer to reserve vertical space or line up columns.
+**What it does:** a blank block that reserves vertical space, pushes the blocks below it down, and
+lines the columns up with one another.
+**How to configure:** **Height** — **Short (190)**, **Medium (300)**, **Tall (430)**, or **Custom px**:
+type the exact height you want (20–3000), or nudge it with **−** / **＋**.
+**Good to know:** it has no title and no fold arrow. Its height applies in **Masonry** flow too, unlike
+the other blocks, whose set height only applies in **Fixed** flow — where the very same Custom px field
+sets each block's height.
+
+| Its configuration | Its ⓘ help |
+|---|---|
+| ![Empty config](docs/img/empty-config.png) | ![Empty help](docs/img/empty-help.png) |
 
 ---
 

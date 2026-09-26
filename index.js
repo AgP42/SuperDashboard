@@ -49,6 +49,34 @@ DashboardNative?.registerFontBase64?.(DSEG7_BOLD_B64, DIGITAL_FONT).catch(() => 
 // hide the bubble; not foreground → restore it (no-op when mode 'off'). This
 // self-heals every exit path (buttons, system gesture, host backgrounding) and
 // a failed tap simply keeps the bubble since the view never becomes active.
+//
+// A headless capture (the lasso and text-selection buttons are showType 0) runs
+// the plugin with NO view on screen, yet the house bubble vanished after adding a
+// clip or a to-do. Both paths that can take the bubble down run around such a
+// press: the host tears the plugin back down (life state 5 → clearAllBubbles) and
+// the RN context may flip 'active' (→ hideBubble). Inside this window a destroy is
+// therefore that teardown, never a real uninstall, and the capture re-asserts the
+// bubble on its way out, which also undoes a stray hide.
+let headlessUntil = 0;
+const HEADLESS_MS = 8000;
+const inHeadless = () => Date.now() < headlessUntil;
+function markHeadless() {
+  headlessUntil = Date.now() + HEADLESS_MS;
+}
+
+/** Re-assert the bubble after a headless capture. showBubble removes then re-adds
+ *  its view, so this is idempotent; the delayed second pass catches a teardown
+ *  that lands after the capture finished. No-op in bubble mode 'off'. */
+function restoreBubbleAfterHeadless(tag) {
+  markHeadless();
+  const go = () =>
+    showBubbleFromConfig()
+      .then(ok => blog(`[bub] headless restore (${tag}) = ${ok}`))
+      .catch(() => {});
+  go();
+  setTimeout(go, 1500);
+}
+
 let lastState = AppState.currentState;
 let activeSince = 0;
 blog(`[state] initial=${lastState}`);
@@ -57,7 +85,11 @@ AppState.addEventListener('change', next => {
   blog(`[state] ${lastState} -> ${next}`);
   if (next === 'active') {
     activeSince = now;
-    blog('[bub] hide (view active)');
+    // A stray 'active' during a headless capture still hides the bubble here: we
+    // must NOT diverge from AppState's own view of the world (a skipped hide
+    // would leave lastState 'active' and the bubble floating over the next real
+    // open). The capture puts the bubble back itself, at most a blink later.
+    blog(`[bub] hide (view active)${inHeadless() ? ' [during headless capture]' : ''}`);
     DashboardNative?.hideBubble?.().catch(() => {});
   } else {
     // A view that goes active→background in under 1.5 s is the "won't open"
@@ -136,6 +168,10 @@ PluginManager.registerPluginLifeListener({
     const state = msg && msg.state;
     blog(`[life] state=${state}`);
     if (state === 5) {
+      if (inHeadless()) {
+        blog('[life] destroy during headless capture → bubble kept');
+        return;
+      }
       blog('[life] destroy → clearing our bubble');
       DashboardNative?.clearAllBubbles?.().catch(() => {});
     }
@@ -300,6 +336,8 @@ async function handleDocSelectionToClip(kind) {
   } catch (e) {
     blog(`[doc] handleDocSelectionToClip failed: ${e && e.message}`);
     ToastAndroid.show('Clip failed', ToastAndroid.SHORT);
+  } finally {
+    restoreBubbleAfterHeadless('doc-sel'); // the press must never cost the bubble
   }
 }
 
@@ -496,6 +534,8 @@ async function handleLassoToClip(kind) {
     blog(`[clip] err: ${e && e.message}`);
     ToastAndroid.show(`Clip error: ${e && e.message}`, ToastAndroid.SHORT);
     recycleEls();
+  } finally {
+    restoreBubbleAfterHeadless('lasso'); // the press must never cost the bubble
   }
 }
 
@@ -553,10 +593,12 @@ PluginManager.registerButtonListener({
   // Settings wizard on first open, where no config was ever saved).
   onButtonPress(e) {
     if (e && (e.id === SEL_BTN || e.id === SEL_TODO_BTN)) {
+      markHeadless(); // no view is opened by this press: protect the bubble
       handleDocSelectionToClip(e.id === SEL_TODO_BTN ? 'todo' : 'clip');
       return;
     }
     if (e && (e.id === LASSO_BTN || e.id === LASSO_TODO_BTN)) {
+      markHeadless();
       handleLassoToClip(e.id === LASSO_TODO_BTN ? 'todo' : 'clip');
       return;
     }

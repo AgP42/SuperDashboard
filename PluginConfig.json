@@ -6,8 +6,8 @@
   "iconPath": "assets/icon.png",
   "desc": "A dashboard you build yourself, opened from a floating bubble or the toolbar. Fully offline, no account.\n\nAdd the blocks you want in 1-3 columns: shortcuts, file browser, search (names, keywords, note titles), a Contents outline of the note you're in, recent files, stars, keywords, clock, device status, app launchers, Note Clips and To-dos. Your choice of design, font and text size.\n\nClips & To-dos: lasso anything in a note (or a PDF/EPUB annotation, or select printed PDF text) and pin it to the dashboard, labelled and linked back to its page. Paste a clip back as native ink or editable text. Tick a to-do on the note or in the dashboard.\n\nNeeds file access, no internet: READ to scan and open your files, WRITE to save settings and draw a to-do's check.\n\nSource & updates: https://github.com/AgP42/SuperDashboard\nSupport: https://ko-fi.com/agp42",
   "author": "AgP42",
-  "versionName": "2.1.1",
-  "versionCode": "188",
+  "versionName": "2.1.3",
+  "versionCode": "190",
   "uses-permissions": [
     "plugin.permission.FILE:READ",
     "plugin.permission.FILE:WRITE"

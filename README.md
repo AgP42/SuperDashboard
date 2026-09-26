@@ -27,7 +27,7 @@ account, no network.
   thumbnails you can paste back as native ink or editable text.
 - **To-do**: tasks captured the same way; a note task gets a tick-box you check from the dashboard or by
   hand, a PDF / EPUB task is dashboard-only.
-- **Empty**: a spacer to line columns up.
+- **Empty**: a spacer to line columns up (preset or exact px height).
 
 Blocks arrange in 1 / 2 / 3 columns (masonry or fixed height), collapse to their title, and each has an
 **ⓘ** help button in Settings. The **[User Guide](USER_GUIDE.md)** explains how every module works and

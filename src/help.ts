@@ -79,4 +79,10 @@ export const HELP: Record<string, HelpEntry> = {
     how: 'Open / Done tabs, "↻ Check notes" (pull a hand-drawn check from the open note) and "Clear done". Layout, Thumbnail size, Sort, Display and the folder / label filters work like Clips.',
     good: 'Tick in the dashboard to draw the check on the note; or tick it by hand on the note and it shows as done here after "↻ Check notes". Un-checking is done from the dashboard. You can also move a marked to-do around, even to another page or note: the plugin finds it again by its #N tag.',
   },
+  spacer: {
+    title: 'Empty',
+    what: 'A blank block: it reserves vertical space, pushes the blocks below it down, and lines the columns up with one another.',
+    how: 'Height: Short (190), Medium (300), Tall (430), or Custom px — type the exact height (20-3000) or nudge it with - / +.',
+    good: 'It has no title and no fold arrow. Its height applies in Masonry flow too, unlike the other blocks, where the set height only applies in Fixed flow.',
+  },
 };

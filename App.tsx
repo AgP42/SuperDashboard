@@ -7,7 +7,7 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {DeviceEventEmitter, NativeModules, ScrollView, Text, View} from 'react-native';
 
 import {getRoute, setRoute, Route} from './src/route';
-import {DashboardConfig, loadConfig, saveConfig, BLOCK_HEIGHTS} from './src/config';
+import {DashboardConfig, loadConfig, saveConfig, blockHeightPx} from './src/config';
 import {leavePlugin} from './src/bubble';
 import {tscale, ZoneView} from './src/zones';
 import {ThemedButton, ui} from './src/ui';
@@ -152,7 +152,7 @@ function DashboardScreen(): React.JSX.Element {
     // collapsing one block doesn't pull the blocks below it up off the grid.
     if (vmode === 'fixed' && z.type !== 'spacer') {
       return (
-        <FixedBlock key={i} height={BLOCK_HEIGHTS[z.h ?? 'M']}>
+        <FixedBlock key={i} height={blockHeightPx(z)}>
           {el}
         </FixedBlock>
       );

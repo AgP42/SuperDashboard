@@ -6,7 +6,7 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {DeviceEventEmitter, Image, Modal, NativeModules, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View} from 'react-native';
 
-import {BLOCK_HEIGHTS, KeywordDisplay, RECENT_DEFAULT, ScanSettings, Theme, Zone, ZONE_ICONS} from './config';
+import {blockHeightPx, KeywordDisplay, RECENT_DEFAULT, ScanSettings, Theme, Zone, ZONE_ICONS} from './config';
 import {openFile, openFileAtPage, openFolder, launchApp} from './open';
 import {deleteStarByIndex, LineImg, unwrap} from './starText';
 import {NativeUIUtils, PluginCommAPI} from 'sn-plugin-lib';
@@ -111,7 +111,7 @@ export function ZoneView({
       case 'toc':
         return <TocZone zone={zone} theme={theme} ts={ts} nonce={nonce} />;
       case 'spacer':
-        return <View style={{height: BLOCK_HEIGHTS[zone.h ?? 'M']}} />;
+        return <View style={{height: blockHeightPx(zone)}} />;
     }
   })();
   return (

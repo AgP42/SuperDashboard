@@ -67,6 +67,9 @@ export interface ZoneCommon {
   col?: number;
   /** Height in 'fixed' vertical mode; also the spacer's height. Default 'M'. */
   h?: BlockHeight;
+  /** Exact height in px, typed by the user; overrides the S/M/L preset when set
+   *  (kept alongside `h` so clearing it falls back to the preset). */
+  hpx?: number;
   /** Collapsed → only the title + an expand arrow show. */
   collapsed?: boolean;
 }
@@ -175,6 +178,18 @@ export interface LayoutConfig {
 
 /** Pixel height per BlockHeight in 'fixed' mode / for spacers. */
 export const BLOCK_HEIGHTS: Record<BlockHeight, number> = {S: 190, M: 300, L: 430};
+/** Bounds for a hand-typed custom block height (px). Below the minimum a block
+ *  would be invisible/untappable; the maximum is a few screens tall. */
+export const MIN_BLOCK_PX = 20;
+export const MAX_BLOCK_PX = 3000;
+
+/** A block slot's height in px: the custom `hpx` when set and sane, else the
+ *  S/M/L preset. Single source for the dashboard (fixed blocks + spacers). */
+export function blockHeightPx(z: ZoneCommon): number {
+  const px = z.hpx;
+  if (typeof px === 'number' && px >= MIN_BLOCK_PX && px <= MAX_BLOCK_PX) return Math.round(px);
+  return BLOCK_HEIGHTS[z.h ?? 'M'];
+}
 
 /** Dashboard text size (also enlarges tap targets). */
 export type TextScale = 'S' | 'M' | 'L' | 'XL';
@@ -305,6 +320,11 @@ function normalize(raw: any): DashboardConfig {
     const rawCol = typeof z.col === 'number' ? z.col : legacyGrid ? i % 2 : 0;
     nz.col = Math.max(0, Math.min(layout.columns - 1, rawCol));
     nz.h = ['S', 'M', 'L'].includes(z.h) ? z.h : 'M';
+    // Custom px height: kept only when it's a sane number, so a hand-edited or
+    // half-typed value can never render a 0-high (invisible) block.
+    const hpx = typeof z.hpx === 'number' ? Math.round(z.hpx) : NaN;
+    if (hpx >= MIN_BLOCK_PX && hpx <= MAX_BLOCK_PX) nz.hpx = hpx;
+    else delete nz.hpx;
     return nz as Zone;
   });
   const scan: ScanSettings = {

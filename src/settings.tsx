@@ -12,7 +12,9 @@ import {Image, Modal as RNModal, NativeModules, ScrollView, StyleSheet, Text, Te
 const KOFI_QR = require('../assets/kofi-qr.png');
 
 import {
+  BLOCK_HEIGHTS,
   BlockHeight,
+  blockHeightPx,
   BubbleMode,
   ClockStyle,
   DashboardConfig,
@@ -26,6 +28,8 @@ import {
   TextScale,
   Theme,
   THEMES,
+  MAX_BLOCK_PX,
+  MIN_BLOCK_PX,
   Zone,
   ZoneCommon,
   ZONE_ICONS,
@@ -392,7 +396,7 @@ const ADDABLE: Zone['type'][] = ['shortcuts', 'stars', 'keywords', 'apps', 'rece
 
 /** Icon + name for a placed block in the canvas. */
 function blockLabel(z: Zone): string {
-  if (z.type === 'spacer') return '▢ empty';
+  if (z.type === 'spacer') return `▢ empty · ${blockHeightPx(z)}px`;
   const ic = ZONE_ICONS[z.type] ?? '•';
   return `${ic} ${z.title && z.title !== '' ? z.title : ZONE_LABELS[z.type] ?? z.type}`;
 }
@@ -596,14 +600,76 @@ function ZoneContentEditor({
         </View>
       )}
       {z.type === 'toc' && <TocEditor i={i} zone={z} update={update} />}
-      {showHeight && (
-        <View>
-          <Text style={ui.subLabel}>Height{vmode === 'masonry' ? ' (empty block)' : ' (Fixed mode: content scrolls inside)'}</Text>
-          <Seg
-            options={[{v: 'S', label: 'Short'}, {v: 'M', label: 'Medium'}, {v: 'L', label: 'Tall'}]}
-            value={z.h ?? 'M'}
-            onChange={v => update(c => void ((c.zones[i] as ZoneCommon).h = v as BlockHeight))}
+      {showHeight && <HeightRow i={i} zone={z} update={update} vmode={vmode} />}
+    </View>
+  );
+}
+
+/** Height picker: the three presets plus "Custom", which reveals a px field with
+ *  -/+ steppers (typing on e-ink is slow). A preset tap drops the custom value,
+ *  so there is always exactly one height in force. */
+function HeightRow({i, zone: z, update, vmode}: {i: number; zone: Zone; update: UP; vmode: 'masonry' | 'fixed'}) {
+  const custom = typeof z.hpx === 'number';
+  const [txt, setTxt] = useState(String(blockHeightPx(z)));
+  // Follow the stored value when it changes elsewhere (preset tap, steppers) but
+  // leave the field alone while a number is half-typed.
+  useEffect(() => {
+    if (typeof z.hpx === 'number') setTxt(String(z.hpx));
+  }, [z.hpx]);
+  const setPx = (n: number) =>
+    update(c => void ((c.zones[i] as ZoneCommon).hpx = Math.min(MAX_BLOCK_PX, Math.max(MIN_BLOCK_PX, Math.round(n)))));
+  // Commit as you type once the number is in range (the Supernote's handwriting
+  // conversion doesn't reliably fire Done/blur, same reason as EditableTitle),
+  // then clamp whatever is left in the field on Done / tap-away.
+  const onType = (t: string) => {
+    setTxt(t);
+    const n = parseInt(t, 10);
+    if (n >= MIN_BLOCK_PX && n <= MAX_BLOCK_PX) setPx(n);
+  };
+  const commit = () => {
+    const n = parseInt(txt, 10);
+    if (Number.isFinite(n)) setPx(n);
+    else setTxt(String(blockHeightPx(z))); // unreadable entry -> back to the live height
+  };
+  const step = (d: number) => setPx((parseInt(txt, 10) || blockHeightPx(z)) + d);
+  return (
+    <View>
+      <Text style={ui.subLabel}>Height{vmode === 'masonry' ? ' (empty block)' : ' (Fixed mode: content scrolls inside)'}</Text>
+      <Seg
+        options={[
+          {v: 'S', label: `Short (${BLOCK_HEIGHTS.S})`},
+          {v: 'M', label: `Medium (${BLOCK_HEIGHTS.M})`},
+          {v: 'L', label: `Tall (${BLOCK_HEIGHTS.L})`},
+          {v: 'px', label: 'Custom px'},
+        ]}
+        value={custom ? 'px' : z.h ?? 'M'}
+        onChange={v =>
+          update(c => {
+            const zc = c.zones[i] as ZoneCommon;
+            if (v === 'px') zc.hpx = blockHeightPx(z); // start from the height on screen
+            else {
+              zc.h = v as BlockHeight;
+              delete zc.hpx; // back to the preset
+            }
+          })
+        }
+      />
+      {custom && (
+        <View style={[ui.row, {alignItems: 'center'}]}>
+          <Mini label="−" onPress={() => step(-10)} />
+          <TextInput
+            style={[ui.titleInput, {width: 90, marginHorizontal: 6}]}
+            value={txt}
+            keyboardType="numeric"
+            returnKeyType="done"
+            onChangeText={onType}
+            onSubmitEditing={commit}
+            onEndEditing={commit}
           />
+          <Mini label="＋" onPress={() => step(10)} />
+          <Text style={ui.subLabel}>
+            {'  '}px ({MIN_BLOCK_PX}–{MAX_BLOCK_PX})
+          </Text>
         </View>
       )}
     </View>

@@ -10,6 +10,20 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.1.3 — 2026-09-26
+
+### Fixed
+- **The bubble no longer disappears when you add a clip or a to-do from a note.** Those buttons run
+  without opening the plugin, and the host's teardown after the press was taking the floating house
+  with it; the bubble is now put back after every capture.
+
+### Changed
+- **Exact block heights.** Besides Short / Medium / Tall, a block (and the **Empty** spacer) can take a
+  **custom height in pixels** — type it, or nudge it with **−** / **＋**.
+- **The Empty block now has its own ⓘ help**, like every other module.
+
+---
+
 ## v2.1.1 — 2026-09-20
 
 ### Changed
