@@ -10,6 +10,24 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.1.9 — 2026-10-04
+
+### Fixed
+- **Search is fast again.** With note-title search on, typing the first letter froze the dashboard for
+  1.5–2.5 s on a device with a couple of thousand headings. The first letter now shows results in
+  about 0.3 s, and later letters are near-instant.
+- **The dashboard no longer closes by itself right after you open it.** After opening a PDF (or
+  another document) from the dashboard, the next tap on the bubble opened the dashboard and closed it
+  again a second later, so you had to tap twice. It now stays open.
+
+### Changed
+- Searches of one or two letters show the top 12 results per group (instead of 40), so the list
+  appears quickly; type a third letter for the full list.
+- The on-device debug log (`MyStyle/dashboard-log.txt`) no longer stops recording once it is full:
+  it now rolls over to `dashboard-log.old.txt`.
+
+---
+
 ## v2.1.3 — 2026-09-26
 
 ### Fixed

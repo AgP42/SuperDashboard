@@ -178,8 +178,23 @@ export async function loadTitles(): Promise<TitleHit[]> {
   }
 }
 
-/** Lower-case + strip diacritics so "Réunion" matches "reunion". */
-const fold = (s: string): string => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+/** Lower-case + strip diacritics so "Réunion" matches "reunion".
+ *  Hot: the first keystroke folds every index entry and heading (2k+ strings), and
+ *  the old `/\p{Diacritic}/gu` Unicode-property regex made that cost 1.2–1.6 s on
+ *  the device. Now: ASCII fast path (no normalize), a plain combining-marks range,
+ *  and a memo so headings/paths reloaded on every dashboard open fold only once. */
+const COMBINING = /[̀-ͯ]/g;
+const NON_ASCII = /[^\x00-\x7f]/;
+const foldMemo = new Map<string, string>();
+const fold = (s: string): string => {
+  const hit = foldMemo.get(s);
+  if (hit !== undefined) return hit;
+  const lower = s.toLowerCase();
+  const out = NON_ASCII.test(lower) ? lower.normalize('NFD').replace(COMBINING, '') : lower;
+  if (foldMemo.size > 50000) foldMemo.clear(); // bound memory; refills from the next search
+  foldMemo.set(s, out);
+  return out;
+};
 
 /** Basename without its extension. Matching runs on this so a query letter can't
  *  hit the extension; e.g. "t" must not match the "t" in ".note". */
@@ -377,6 +392,20 @@ function prepTitles(titles: TitleHit[]): {f: string[]; fp: string[]} {
   return a._prep;
 }
 
+/** Precompute the folded match strings right after a load, while the user hasn't
+ *  typed yet, so the first keystroke doesn't pay for it. */
+export function warmSearch(idx: IndexData | null, titles: TitleHit[]): void {
+  if (idx) prepEntries(idx);
+  if (titles.length) prepTitles(titles);
+}
+
+/** Rank desc, then folded name asc. Plain `<` on pre-folded keys: localeCompare
+ *  is ICU-backed and very slow on Hermes; sorting ~2k one-letter matches with it
+ *  took 1–1.5 s per keystroke on the device. */
+function byRankKey(a: {r: number; k: string}, b: {r: number; k: string}): number {
+  return b.r - a.r || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0);
+}
+
 function underRoots(path: string, roots?: string[]): boolean {
   if (!roots || !roots.length) return true; // no scope → whole device
   return roots.some(r => path === r || path.startsWith(r.endsWith('/') ? r : r + '/'));
@@ -406,16 +435,16 @@ export function runSearch(idx: IndexData | null, kws: KwEntry[], rawQuery: strin
   // star:/type: (other than note) suppress them; kw: makes them the only results.
   let keywords: (KwEntry & {r: number})[] = [];
   if (!pq.starOnly && !pq.titleOnly && typeOk('note')) {
-    const seenKw = new Map<string, KwEntry & {r: number}>();
+    const seenKw = new Map<string, KwEntry & {r: number; k: string}>();
     for (const k of kws) {
       if (!underRoots(k.file, roots) || !folderOk(k.file)) continue;
       const r = matchAll(k.keyword, pq);
       if (r < 0) continue;
       const key = fold(k.keyword);
       const prev = seenKw.get(key);
-      if (!prev || r > prev.r) seenKw.set(key, {...k, r});
+      if (!prev || r > prev.r) seenKw.set(key, {...k, r, k: key});
     }
-    keywords = [...seenKw.values()].sort((a, b) => b.r - a.r || a.keyword.localeCompare(b.keyword)).slice(0, cap);
+    keywords = [...seenKw.values()].sort(byRankKey).slice(0, cap);
   }
   if (pq.kwOnly) return {...empty, keywords};
 
@@ -425,7 +454,7 @@ export function runSearch(idx: IndexData | null, kws: KwEntry[], rawQuery: strin
   const allT = opts.titles ?? [];
   if (allT.length && !pq.starOnly && typeOk('note')) {
     const prepT = prepTitles(allT); // folded once per load, not per keystroke
-    const seenT = new Map<string, TitleHit & {r: number}>();
+    const seenT = new Map<string, TitleHit & {r: number; k: string}>();
     for (let i = 0; i < allT.length; i++) {
       const t = allT[i];
       if (!underRoots(t.file, roots)) continue;
@@ -434,16 +463,16 @@ export function runSearch(idx: IndexData | null, kws: KwEntry[], rawQuery: strin
       if (r < 0) continue;
       const key = prepT.f[i] + '@' + t.file + '@' + t.page; // distinct heading occurrences
       const prev = seenT.get(key);
-      if (!prev || r > prev.r) seenT.set(key, {...t, r});
+      if (!prev || r > prev.r) seenT.set(key, {...t, r, k: prepT.f[i]});
     }
-    titles = [...seenT.values()].sort((a, b) => b.r - a.r || a.title.localeCompare(b.title)).slice(0, cap);
+    titles = [...seenT.values()].sort(byRankKey).slice(0, cap);
   }
   if (pq.titleOnly && allT.length) return {...empty, titles};
 
-  const folders: (IndexEntry & {r: number})[] = [];
-  const notes: (IndexEntry & {r: number})[] = [];
-  const pdfs: (IndexEntry & {r: number})[] = [];
-  const docs: (IndexEntry & {r: number})[] = [];
+  const folders: (IndexEntry & {r: number; k: string})[] = [];
+  const notes: (IndexEntry & {r: number; k: string})[] = [];
+  const pdfs: (IndexEntry & {r: number; k: string})[] = [];
+  const docs: (IndexEntry & {r: number; k: string})[] = [];
   const prep = prepEntries(idx); // precomputed folded name/path per entry (no per-key folding)
   for (let i = 0; i < idx.entries.length; i++) {
     const e = idx.entries[i];
@@ -452,7 +481,7 @@ export function runSearch(idx: IndexData | null, kws: KwEntry[], rawQuery: strin
     if (e.isDir) {
       if (pq.starOnly || !typeOk('folder')) continue; // folders have no stars
       const r = matchAllF(prep.f[i], pq);
-      if (r >= 0) folders.push({...e, r});
+      if (r >= 0) folders.push({...e, r, k: prep.f[i]});
     } else {
       if (pq.starOnly && !(starred && starred.has(e.path))) continue;
       const x = ext(e.name);
@@ -460,14 +489,13 @@ export function runSearch(idx: IndexData | null, kws: KwEntry[], rawQuery: strin
       if (!typeOk(kind)) continue;
       const r = matchAllF(prep.f[i], pq); // prep.f is the folded stem for files
       if (r < 0) continue;
-      (kind === 'note' ? notes : kind === 'pdf' ? pdfs : docs).push({...e, r});
+      (kind === 'note' ? notes : kind === 'pdf' ? pdfs : docs).push({...e, r, k: prep.f[i]});
     }
   }
-  const byRank = (a: {r: number; name: string}, b: {r: number; name: string}) => b.r - a.r || a.name.localeCompare(b.name);
-  folders.sort(byRank);
-  notes.sort(byRank);
-  pdfs.sort(byRank);
-  docs.sort(byRank);
+  folders.sort(byRankKey);
+  notes.sort(byRankKey);
+  pdfs.sort(byRankKey);
+  docs.sort(byRankKey);
   return {
     folders: folders.slice(0, cap),
     notes: notes.slice(0, cap),

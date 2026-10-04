@@ -425,17 +425,34 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
         }
     }
 
+    private static final String LOG_PATH = "/storage/emulated/0/MyStyle/dashboard-log.txt";
+    private static final String LOG_OLD_PATH = "/storage/emulated/0/MyStyle/dashboard-log.old.txt";
+    private static final long LOG_CAP = 262_144;
+
     @ReactMethod
     public void appendLog(String text, Promise promise) {
+        // Mirror to logcat first: it survives whatever happens to the file
+        // (`adb logcat -s SuperDashboard`).
+        android.util.Log.i("SuperDashboard", text);
         try {
-            File f = new File("/storage/emulated/0/MyStyle/dashboard-log.txt");
-            // Cap the debug log so it can't grow without bound; start fresh.
-            if (f.length() > 262_144) f.delete();
-            try (java.io.FileWriter w = new java.io.FileWriter(f, true)) {
+            File f = new File(LOG_PATH);
+            // Cap the debug log so it can't grow without bound. The previous
+            // "f.delete()" failed silently on the device (MyStyle file owned by
+            // the media provider), leaving the file over the cap and every later
+            // append lost. Rotate to .old instead; if even that is refused,
+            // truncate in place (overwrite works wherever append does).
+            boolean fresh = false;
+            if (f.length() > LOG_CAP) {
+                File old = new File(LOG_OLD_PATH);
+                old.delete();
+                fresh = !f.renameTo(old) && !f.delete();
+            }
+            try (java.io.FileWriter w = new java.io.FileWriter(f, !fresh)) {
                 w.write(text + "\n");
             }
             promise.resolve(true);
         } catch (Exception e) {
+            android.util.Log.w("SuperDashboard", "appendLog failed", e);
             promise.reject("LOG_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
         }
     }

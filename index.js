@@ -28,7 +28,9 @@ const {DashboardNative} = NativeModules;
 function blog(msg) {
   const t = new Date();
   const p = n => String(n).padStart(2, '0');
-  DashboardNative?.appendLog?.(`${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())} ${msg}`).catch(() => {});
+  DashboardNative?.appendLog?.(
+    `${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())} ${msg}`,
+  ).catch(() => {});
 }
 
 AppRegistry.registerComponent(appName, () => App);

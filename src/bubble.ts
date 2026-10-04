@@ -4,7 +4,7 @@
  * exit (open a target, fold ⊖, Settings ✕) restores the bubble per config
  * before closing, so no path can strand a hidden bubble.
  */
-import {NativeModules} from 'react-native';
+import {AppState, NativeModules} from 'react-native';
 import {PluginManager} from 'sn-plugin-lib';
 
 import {loadConfig} from './config';
@@ -27,8 +27,34 @@ export async function showBubbleFromConfig(): Promise<boolean> {
   }
 }
 
-/** Restore the bubble, then close the plugin view. */
+// Bumped each time the plugin view comes to the foreground. A deferred close
+// must only ever close the view session that asked for it: opening a file makes
+// the host hide the view on its own (schedulePendingHide), which pauses RN timers,
+// so the 150 ms close below stayed frozen and fired on the NEXT bubble open,
+// shutting the freshly opened dashboard ~1 s later (the "PARASITE close").
+let viewGen = 0;
+AppState.addEventListener('change', s => {
+  if (s === 'active') viewGen++;
+});
+
+/** Restore the bubble, then close the plugin view, unless the host already hid
+ *  it or the view was re-opened since (a stale close would kill the new one). */
 export async function leavePlugin(): Promise<void> {
+  const gen = viewGen;
   await showBubbleFromConfig();
-  setTimeout(() => PluginManager.closePluginView(), 150);
+  if (AppState.currentState !== 'active') {
+    leaveLog(`skip close: view already ${AppState.currentState}`);
+    return;
+  }
+  setTimeout(() => {
+    if (viewGen !== gen || AppState.currentState !== 'active') {
+      leaveLog('skip stale close (view re-opened or hidden since)');
+      return;
+    }
+    PluginManager.closePluginView();
+  }, 150);
+}
+
+function leaveLog(m: string) {
+  DashboardNative?.appendLog?.(`[leave] ${m}`).catch(() => {});
 }

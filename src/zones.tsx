@@ -13,7 +13,8 @@ import {NativeUIUtils, PluginCommAPI} from 'sn-plugin-lib';
 import {readNoteToc, cachedToc, TocEntry} from './notetoc';
 import {scanStars, scanKeywords, flushCurrentNote, noteTitle, parentFolder, recentModifiedFiles, KeywordHit} from './scanner';
 import {readRecent} from './recent';
-import {loadIndex, loadKeywords, loadTitles, loadStarredFiles, loadStats, buildIndex, runSearch, IndexData, IndexEntry, KwEntry, TitleHit} from './searchIndex';
+import {loadIndex, loadKeywords, loadTitles, loadStarredFiles, loadStats, buildIndex, runSearch, warmSearch, IndexData, IndexEntry, KwEntry, TitleHit} from './searchIndex';
+import {plog, timed} from './perf';
 import {ClockFace} from './clock';
 import {Clip, listClips, deleteClip, setClipDone, setClipKind, reanchorClip, setClipLabels, allClipLabels, updateClipSource} from './clips';
 import {pasteClip} from './paste';
@@ -138,15 +139,30 @@ function SearchZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'searc
 
   useEffect(() => {
     // Load the persisted snapshot (instant); loadIndex refreshes in the background.
-    loadIndex().then(setIdx).catch(() => {});
-    loadKeywords().then(setKws).catch(() => {});
-    loadStarredFiles().then(setStarred).catch(() => {});
-    if (withTitles) loadTitles().then(setTts).catch(() => {});
+    timed('search:index', loadIndex, v => `${v.entries.length} entries`).then(setIdx).catch(() => {});
+    timed('search:keywords', loadKeywords, v => `${v.length}`).then(setKws).catch(() => {});
+    timed('search:starred', loadStarredFiles, v => `${v.size}`).then(setStarred).catch(() => {});
+    if (withTitles) timed('search:titles', loadTitles, v => `${v.length}`).then(setTts).catch(() => {});
   }, [nonce, withTitles]);
+
+  // Fold the index/headings in the idle gap after loading, not on the first key.
+  useEffect(() => {
+    const h = setTimeout(() => {
+      const t0 = Date.now();
+      warmSearch(idx, withTitles ? tts : []);
+      plog(`search:warm ${Date.now() - t0}ms`);
+    }, 300);
+    return () => clearTimeout(h);
+  }, [idx, tts, withTitles]);
 
   const roots = zone.folders;
   const rootsKey = (roots ?? []).join('|');
-  const res = useMemo(() => runSearch(idx, kws, q, {roots, starred, titles: withTitles ? tts : []}), [idx, kws, q, rootsKey, starred, tts, withTitles]); // eslint-disable-line react-hooks/exhaustive-deps
+  const res = useMemo(() => {
+    // 1–2 letters match most of the device; rendering 150+ rows per key is what
+    // e-ink chokes on, so short queries show the top rows per group only.
+    const cap = q.trim().length < 3 ? 12 : 40;
+    return runSearch(idx, kws, q, {roots, starred, titles: withTitles ? tts : [], cap});
+  }, [idx, kws, q, rootsKey, starred, tts, withTitles]); // eslint-disable-line react-hooks/exhaustive-deps
   const total = res.folders.length + res.notes.length + res.pdfs.length + res.docs.length + res.keywords.length + res.titles.length;
 
   const rebuild = async () => {
@@ -1082,7 +1098,7 @@ function TocZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'toc'}>; 
       //    the pages whose block length actually changed.
       if (tocTimer.current) clearTimeout(tocTimer.current);
       tocTimer.current = setTimeout(async () => {
-        setData({path: p, ...(await readNoteToc(p))});
+        setData({path: p, ...(await timed('toc:read', () => readNoteToc(p)))});
       }, 1200);
     })();
   };

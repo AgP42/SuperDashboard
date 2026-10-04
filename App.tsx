@@ -13,6 +13,7 @@ import {tscale, ZoneView} from './src/zones';
 import {ThemedButton, ui} from './src/ui';
 import {SettingsScreen} from './src/settings';
 import {autoRefreshTitles} from './src/notetoc';
+import {timed} from './src/perf';
 
 const SCALE: Record<string, number> = {S: 1, M: 1.18, L: 1.4, XL: 1.7};
 
@@ -87,7 +88,7 @@ function DashboardScreen(): React.JSX.Element {
         if (needsTitles) {
           if (autoRefreshTimer.current) clearTimeout(autoRefreshTimer.current); // never stack timers across re-entries
           autoRefreshTimer.current = setTimeout(() => {
-            if (alive) void autoRefreshTitles().catch(() => {});
+            if (alive) void timed('toc:autoRefresh', autoRefreshTitles, r => `${r.done}/${r.modified} read`).catch(() => {});
           }, 1800);
         }
       });
