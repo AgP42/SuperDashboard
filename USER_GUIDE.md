@@ -411,5 +411,33 @@ and are cleaned up automatically.
 
 ## 6. Support
 
+### Reporting a problem: send the log
+
+SuperDashboard keeps a technical log on the device. Sending it with your report is the fastest way to get
+a problem fixed.
+
+**Where it is:** in the **`MyStyle`** folder of your Supernote:
+
+- `MyStyle/dashboard-log.txt`: the current log;
+- `MyStyle/dashboard-log.old.txt`: the previous one (only exists once the log has filled up).
+
+**How to get it:**
+
+1. **Reproduce the problem first**, then fetch the log right after, so the relevant lines are at the end.
+2. Copy `dashboard-log.txt` to your computer, whichever way is easiest:
+   - **USB cable**: plug the Supernote into your computer, open its storage, go to `MyStyle` and copy
+     the file. On a Mac you need an MTP tool such as OpenMTP or Android File Transfer.
+   - **Browse & Access** (Wi-Fi transfer built into the Supernote): turn it on, open the address it
+     shows in a browser on your computer, go to `MyStyle` and download the file.
+3. **Attach it** to a [GitHub issue](https://github.com/AgP42/SuperDashboard/issues), together with your
+   **device model** (Manta, Nomad, A5 X, A6 X…), your **firmware version** (Settings → About) and the
+   **SuperDashboard version** (Settings → Apps → Plugins).
+
+**Privacy:** the log contains the **names and folders of your notes and documents** (for example from
+Recent or Contents) and technical events. It never contains what you wrote in your notes. Feel free to
+read it before sending it.
+
+### Supporting the project
+
 SuperDashboard is a personal project built by a Supernote user, for Supernote users. If it saves you a
 few taps every day, a small contribution is appreciated: https://ko-fi.com/agp42
