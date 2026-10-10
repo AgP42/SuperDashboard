@@ -17,7 +17,7 @@ account, no network.
 - **Files**: a small in-dashboard file browser.
 - **Search**: file & folder names, keywords, and note headings, with a compact query grammar.
 - **Contents**: the current note's headings as a tappable outline; tap one to jump to its page.
-- **Recent**: your recently-modified notes and documents.
+- **Recent**: your recent notes and documents (including on an SD card).
 - **Stars**: five-star pages from a scan, grouped by note, with optional line previews.
 - **Keywords**: note keywords as tappable chips, each opening its note on the right page.
 - **Clock**: time, date, week number and extra time zones, in a choice of faces.

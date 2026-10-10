@@ -142,7 +142,7 @@ export type Zone = ZoneCommon &
     | {type: 'apps'; title?: string; apps: AppItem[]; display?: ItemDisplay}
     | {type: 'recent'; title?: string; count?: number; display?: ItemDisplay}
     | {type: 'clock'; title?: string; style?: ClockStyle; hour24?: boolean; locale?: string; showDate?: boolean; weekNum?: WeekNum; extras?: ClockExtra[]}
-    | {type: 'search'; title?: string; folders?: string[]; searchTitles?: boolean}
+    | {type: 'search'; title?: string; folders?: string[]; searchTitles?: boolean; searchSd?: boolean}
     | {type: 'status'; title?: string; battery?: boolean; storage?: boolean; stats?: boolean}
     | {type: 'nav'; title?: string; root?: string}
     | {type: 'clips'; title?: string; folders?: string[]; labels?: string[]; display?: 'grid' | 'list'; sort?: ClipSort; size?: 'S' | 'M' | 'L'; textMode?: ClipTextMode}
@@ -394,7 +394,7 @@ function normalizeZone(z: any): Zone {
       };
     }
     case 'search':
-      return {...z, folders: arr(z.folders), searchTitles: !!z.searchTitles}; // empty folders = whole device
+      return {...z, folders: arr(z.folders), searchTitles: !!z.searchTitles, searchSd: !!z.searchSd}; // empty folders = whole device
     case 'status':
     case 'nav':
       return {...z};

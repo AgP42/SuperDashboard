@@ -134,6 +134,8 @@ each one does and how to configure it.
 saved page.
 **How to configure:** add with the **＋** (a browser: tick several items, then Save). Reorder with ▲▼,
 remove with ✕. Layout: List, Grid (tiles) or Inline (wrapping chips).
+**Good to know:** with an SD card inserted, the browser shows **Internal | SD card** at the top, so
+shortcuts can point to files on the card too.
 
 | The Shortcuts block | Its configuration |
 |---|---|
@@ -153,11 +155,12 @@ without leaving it.
 
 **What it does:** finds file & folder names, keywords, and (optionally) note headings; tap a result to
 open it on its page.
-**How to configure:** turn on **"Also search note titles"** to include headings, then tap **"≣ Index
-titles now"** once. Scope: add folders to limit the search, or leave empty for the whole device.
+**How to configure:** turn on **"Also search note titles"** to include headings, then tap **"↻ Update
+heading index"** once. Scope: add folders to limit the search, or leave empty for the whole device.
+**"Also search the SD card"** (off by default) adds the card's files, folders and note headings.
 **Good to know:** grammar under the box, e.g. `"phrase"`, `=exact`, `a|b`, `!exclude`, `f:folder`,
-`kw:`, `title:`, `star:`, `type:note|pdf|doc|folder`, `approx:`. The title index is incremental, so
-re-running it after adding notes is fast.
+`kw:`, `title:`, `star:`, `type:note|pdf|doc|folder`, `approx:`. See
+[Heading index](#heading-index) for the two index buttons.
 
 | Title results | Enabling title search |
 |---|---|
@@ -171,7 +174,18 @@ its page.
 Supernote title style, mapping Style 1 (black), 2 (gray/white), 3 (gray/black), 4 (shadow) to levels
 1-4.
 **Good to know:** headings are OCR'd once per note and cached, so unchanged notes are instant. Converted
-(typewritten) and older-note headings are included.
+(typewritten) and older-note headings are included. The same [heading index](#heading-index) buttons as
+Search are in this block's configuration.
+
+#### Heading index
+
+Headings carry no text, so each one is read by handwriting recognition once and cached; Contents and title
+search share that cache. Notes you edit are refreshed automatically when the dashboard opens. To refresh
+the whole library by hand (Search or Contents configuration):
+
+- **↻ Update heading index**: re-reads only what changed since last time. Takes seconds.
+- **⟲ Re-index all**: re-reads every page of every note. Use it if a heading looks wrong; it can take a
+  long time on a big library. Progress shows as *Working (12/139)…*.
 
 | The outline (indented) | Indent mapping |
 |---|---|
@@ -179,10 +193,11 @@ Supernote title style, mapping Style 1 (black), 2 (gray/white), 3 (gray/black), 
 
 ### 4.5 🗒 Recent
 
-**What it does:** your recently-modified notes and documents, newest first.
+**What it does:** your recent notes and documents, newest first, including those on an SD card.
 **How to configure:** count **4 / 8 / 12 / 16 / 20**; Layout List / Grid / Inline.
-**Good to know:** on Chauvet 3.29.43 / 2.26.40+ this shows recently-*modified* files (the recently-opened
-list is outside the plugin's sandbox there).
+**Good to know:** on Chauvet 3.29.43 / 2.26.40+ the system's recently-opened list is outside the plugin's
+sandbox, so Recent combines files you **modified** with files you had **open behind the dashboard**. A
+file you only looked at, without opening the dashboard over it, doesn't show up.
 
 | The Recent block | Its configuration |
 |---|---|
@@ -359,7 +374,8 @@ rather than the whole device for speed.
 
 **＋ Add folder / note / PDF / EPUB** (Shortcuts), the **scan folders** picker (Stars / Keywords /
 Search / Clips / To-do) and the **apps** picker all use a full-page browser: navigate, tick several
-items, then **Save (N)** adds them at once.
+items, then **Save (N)** adds them at once. With an SD card inserted, **Internal | SD card** at the top
+switches storage.
 
 ### Advanced
 
@@ -372,8 +388,10 @@ and are cleaned up automatically.
 
 - **Page jump**: notes, PDFs and EPUBs open **on the target page** (a star's, keyword's, shortcut's,
   clip's or heading's page) via the firmware's file opener.
-- **Recent on Chauvet 3.29.43 / 2.26.40+**: shows recently-*modified* notes/documents (the recently-opened
-  list is outside the plugin's sandbox there).
+- **Recent on Chauvet 3.29.43 / 2.26.40+**: combines recently-*modified* files with those you had open
+  behind the dashboard (the system's recently-opened list is outside the plugin's sandbox there).
+- **SD card**: available in every folder/file picker and in Recent; Search includes it only when you turn
+  on **"Also search the SD card"**.
 - **Stars/keywords in PDFs/EPUBs** aren't listed (the system only exposes them for notes).
 - **Clips / To-dos on PDFs / EPUBs** are **dashboard-only**: capture by lasso (your annotations) or by
   selecting printed text, but nothing is drawn on the document and PDF to-dos don't live-sync. On-page

@@ -207,6 +207,49 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
         }
     }
 
+    /**
+     * Removable storage roots (SD cards), e.g. ["/storage/1C04-5DD5"]. The
+     * PluginHost's view of /storage does NOT list mounted cards (verified in
+     * SuperSearch), so ask Android: StorageManager volumes (API 30+) plus the
+     * per-volume app dir from getExternalFilesDirs, cut at "/Android/". Primary
+     * (internal, /storage/emulated/0) is excluded. Same approach as SuperSearch /
+     * SmartNoteAI; plain java.io then reads the card under the FILE:READ grant.
+     */
+    @ReactMethod
+    public void listStorageVolumes(Promise promise) {
+        java.util.LinkedHashSet<String> roots = new java.util.LinkedHashSet<>();
+        Context ctx = getReactApplicationContext();
+        try {
+            android.os.storage.StorageManager sm = (android.os.storage.StorageManager) ctx.getSystemService(Context.STORAGE_SERVICE);
+            if (sm != null && Build.VERSION.SDK_INT >= 30) {
+                for (android.os.storage.StorageVolume v : sm.getStorageVolumes()) {
+                    if (v.isPrimary()) continue;
+                    File d = v.getDirectory();
+                    if (d != null) roots.add(d.getAbsolutePath());
+                }
+            }
+        } catch (Throwable e) {
+            android.util.Log.w("SuperDashboard", "storageVolumes failed", e);
+        }
+        try {
+            File[] dirs = ctx.getExternalFilesDirs(null);
+            if (dirs != null) {
+                for (File f : dirs) {
+                    if (f == null) continue;
+                    String p = f.getAbsolutePath();
+                    if (p.startsWith("/storage/emulated/")) continue;
+                    int i = p.indexOf("/Android/");
+                    if (i > 0) roots.add(p.substring(0, i));
+                }
+            }
+        } catch (Throwable e) {
+            android.util.Log.w("SuperDashboard", "externalFilesDirs failed", e);
+        }
+        WritableArray out = Arguments.createArray();
+        for (String r : roots) out.pushString(r);
+        promise.resolve(out);
+    }
+
     // ---- Persistence / logging -------------------------------------------
 
     /** Write text to an absolute path (SDK has no writeFile). Creates parent dirs. */
@@ -218,15 +261,27 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
             File f = new File(path);
             File parent = f.getParentFile();
             if (parent != null && !parent.exists()) parent.mkdirs();
+            // Write a temp file then rename it over the target (atomic: a crash
+            // mid-write can't leave a half file). The firmware forbids plugins to
+            // delete files (SecurityException), and may treat a rename-over as
+            // one: on ANY failure, fall back to overwriting the target directly.
+            // Never call delete() here — it threw and lost the whole save.
             File tmp = new File(path + ".tmp");
-            try (java.io.FileWriter w = new java.io.FileWriter(tmp, false)) {
-                w.write(content);
-                w.flush();
+            boolean done = false;
+            try {
+                try (java.io.FileWriter w = new java.io.FileWriter(tmp, false)) {
+                    w.write(content);
+                    w.flush();
+                }
+                done = tmp.renameTo(f);
+            } catch (Exception e) {
+                android.util.Log.w("SuperDashboard", "writeFile tmp+rename failed for " + path, e);
             }
-            if (!tmp.renameTo(f)) {
-                // rename can fail if the target exists on some filesystems
-                f.delete();
-                if (!tmp.renameTo(f)) throw new java.io.IOException("rename failed");
+            if (!done) {
+                try (java.io.FileWriter w = new java.io.FileWriter(f, false)) {
+                    w.write(content);
+                    w.flush();
+                }
             }
             promise.resolve(true);
         } catch (Exception e) {
@@ -278,7 +333,7 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
                 for (File k : kids) {
                     String n = k.getName();
                     if (n.startsWith(prefix) && !n.equals(keepName) && k.isFile()) {
-                        if (k.delete()) removed++;
+                        if (safeDelete(k)) removed++;
                     }
                 }
             }
@@ -345,8 +400,19 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
         } else {
             sum += f.length();
         }
-        f.delete();
+        safeDelete(f);
         return sum;
+    }
+
+    /** delete() that never throws: the firmware's PluginSecurityManager raises a
+     *  SecurityException where the plugin may not delete, which would otherwise
+     *  abort a whole cleanup loop at the first refused file. */
+    private static boolean safeDelete(File f) {
+        try {
+            return f.delete();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** In oat/, drop compiled artifacts (app_<oldts>.odex/vdex/art) not matching keep. */
@@ -359,7 +425,7 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
                 sum += cleanOat(k, keep);
             } else if (k.getName().startsWith("app_") && !k.getName().contains(keep)) {
                 sum += k.length();
-                k.delete();
+                safeDelete(k);
             }
         }
         return sum;
@@ -436,16 +502,22 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
         android.util.Log.i("SuperDashboard", text);
         try {
             File f = new File(LOG_PATH);
-            // Cap the debug log so it can't grow without bound. The previous
-            // "f.delete()" failed silently on the device (MyStyle file owned by
-            // the media provider), leaving the file over the cap and every later
-            // append lost. Rotate to .old instead; if even that is refused,
-            // truncate in place (overwrite works wherever append does).
+            // Cap the debug log so it can't grow without bound. The firmware's
+            // PluginSecurityManager forbids plugins to DELETE files (it throws
+            // SecurityException), so any delete/rename-over in the rotation killed
+            // every later append. Rotate with plain writes only: copy the full log
+            // over .old (overwrite), then truncate the log in place.
             boolean fresh = false;
             if (f.length() > LOG_CAP) {
-                File old = new File(LOG_OLD_PATH);
-                old.delete();
-                fresh = !f.renameTo(old) && !f.delete();
+                try (java.io.FileInputStream in = new java.io.FileInputStream(f);
+                     java.io.FileOutputStream out = new java.io.FileOutputStream(LOG_OLD_PATH, false)) {
+                    byte[] buf = new byte[16384];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                } catch (Exception e) {
+                    android.util.Log.w("SuperDashboard", "log rotate copy failed", e);
+                }
+                fresh = true; // truncate: overwrite is allowed wherever append is
             }
             try (java.io.FileWriter w = new java.io.FileWriter(f, !fresh)) {
                 w.write(text + "\n");

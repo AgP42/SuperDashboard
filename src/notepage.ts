@@ -79,18 +79,34 @@ async function readFooterPages(path: string): Promise<{size: number; pages: {pag
 export async function readPageRevs(path: string): Promise<{page: number; rev: string}[] | null> {
   const fp = await readFooterPages(path);
   if (!fp) return null;
-  // rev = the page's block LENGTH, not its footer address. The address shifts for
-  // every page after an edited one (append-only save), so keying on it re-reads
-  // the whole note on any change; the length changes only when THAT page's own
-  // content changes. Costs one 4-byte read per page (negligible vs ~1-2s OCR).
+  // rev = PAGEID : page-block length : main-layer length : stroke-path length.
+  //  - Not the footer address: it shifts for every page after an edited one
+  //    (append-only save), which would re-read the whole note on any change.
+  //  - PAGEID makes it an identity: page blocks are near-identical metadata, so a
+  //    length-only rev let a page inserted before a titled one inherit that
+  //    page's cached heading (Contents listed the title twice). It also lets a
+  //    page that merely moved be recognised and reused.
+  //  - The layer/stroke block LENGTHS are content-derived (change with the ink)
+  //    yet position-independent; the page block alone is mostly addresses and
+  //    often kept its length across an edit.
+  // Costs a footer read + one small block and two 4-byte reads per page.
   const out: {page: number; rev: string}[] = [];
   for (const p of fp.pages) {
-    let len = 0;
-    if (p.addr > 0 && p.addr + 4 <= fp.size) {
-      const lenR = await read(path, p.addr, 4);
-      if (lenR && lenR.s.length >= 4) len = u32le(lenR.s);
+    const block = await readBlock(path, p.addr, fp.size);
+    if (block === null) {
+      out.push({page: p.page, rev: '0'});
+      continue;
     }
-    out.push({page: p.page, rev: String(len)});
+    const lenAt = async (tag: string): Promise<number> => {
+      const m = new RegExp(`<${tag}:(\\d+)>`).exec(block);
+      const a = m ? parseInt(m[1], 10) : 0;
+      if (a <= 0 || a + 4 > fp.size) return 0;
+      const r = await read(path, a, 4);
+      return r && r.s.length >= 4 ? u32le(r.s) : 0;
+    };
+    const main = await lenAt('MAINLAYER');
+    const strokes = await lenAt('TOTALPATH');
+    out.push({page: p.page, rev: `${pageIdFromBlock(block)}:${block.length}:${main}:${strokes}`});
   }
   out.sort((a, b) => a.page - b.page);
   return out;
@@ -100,6 +116,13 @@ export async function readPageRevs(path: string): Promise<{page: number; rev: st
 function pageIdFromBlock(block: string): string {
   const id = /<PAGEID:([^>]+)>/.exec(block);
   return id && id[1].length > 0 ? id[1] : '';
+}
+
+/** Byte size of a file in one native call (0 if unreadable). The .note format is
+ *  append-only, so an unchanged size means no save happened since. */
+export async function noteFileSize(path: string): Promise<number> {
+  const r = await read(path, 0, 1);
+  return r ? r.size : 0;
 }
 
 /** Stable PAGEID of a given 0-indexed page ('' if unavailable). O(1): footer +

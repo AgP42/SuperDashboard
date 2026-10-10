@@ -16,6 +16,7 @@ export const HELP: Record<string, HelpEntry> = {
     title: 'Shortcuts',
     what: 'One-tap openers for the folders, notes, PDFs and EPUBs you use most; each opens on its saved page.',
     how: 'Add with the "+" (a browser: tick several items, then Save). Reorder with ▲▼, remove with ✕. Layout: List, Grid (tiles) or Inline (wrapping chips).',
+    good: 'With an SD card inserted, the browser shows "Internal | SD card" at the top, so shortcuts can point to the card too.',
   },
   nav: {
     title: 'Files',
@@ -25,20 +26,20 @@ export const HELP: Record<string, HelpEntry> = {
   search: {
     title: 'Search',
     what: 'Finds file & folder names, keywords, and (optionally) note headings; tap a result to open it on its page.',
-    how: '"Also search note titles": On to include headings, then tap "≣ Index titles now" once. Scope: add folders to limit the search, or leave empty for the whole device.',
-    good: 'Grammar under the box: "phrase", =exact, a|b, !exclude, f:folder, kw:, title:, star:, type:note|pdf|doc|folder, approx:. The title index is incremental, so re-running it after adding notes is fast.',
+    how: '"Also search note titles": On to include headings, then tap "↻ Update heading index" once. Scope: add folders to limit the search, or leave empty for the whole device. "Also search the SD card" (off by default) adds the card.',
+    good: 'Grammar under the box: "phrase", =exact, a|b, !exclude, f:folder, kw:, title:, star:, type:note|pdf|doc|folder, approx:. "↻ Update heading index" only re-reads what changed (seconds); "⟲ Re-index all" re-reads everything (slow; use it if a heading looks wrong).',
   },
   toc: {
     title: 'Contents',
     what: 'An outline of the headings in the note open behind the dashboard; tap one to jump to its page.',
     how: '"Indent by title level": Off = flat list; On indents each heading by its Supernote title style, mapping Style 1 (black), 2 (gray/white), 3 (gray/black), 4 (shadow) to levels 1-4.',
-    good: 'Headings are OCR’d once per note and cached, so unchanged notes are instant. Converted (typewritten) and older-note headings are included.',
+    good: 'Headings are OCR’d once per note and cached, so unchanged notes are instant. Converted (typewritten) and older-note headings are included. "↻ Update heading index" / "⟲ Re-index all" refresh the whole library by hand.',
   },
   recent: {
     title: 'Recent',
-    what: 'Your recently-modified notes and documents, newest first.',
+    what: 'Your recent notes and documents, newest first, including those on an SD card.',
     how: 'Count: 4, 8, 12, 16 or 20. Layout: List, Grid (tiles) or Inline (wrapping chips).',
-    good: 'On Chauvet 3.29.43 / 2.26.40+ this shows recently-modified files (the recently-opened list is outside the plugin’s sandbox there).',
+    good: 'On Chauvet 3.29.43 / 2.26.40+ the system’s recently-opened list is outside the plugin’s sandbox, so Recent combines files you modified with files you had open behind the dashboard.',
   },
   stars: {
     title: 'Stars',

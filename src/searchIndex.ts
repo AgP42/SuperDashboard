@@ -13,6 +13,7 @@ import {NativeModules} from 'react-native';
 
 import {allTitles} from './notetoc';
 import {cacheDir} from './paths';
+import {isSdPath, SD_SYSTEM_DIR, sdRoots, searchSdEnabled} from './storage';
 
 const {DashboardNative} = NativeModules;
 
@@ -24,6 +25,10 @@ const SKIP_DIR = /^(Android|\.)/;
 const LIST_CONCURRENCY = 24;
 const MAX_DIRS = 1500; // bounds a whole-device walk
 const MAX_ENTRIES = 8000;
+// SD cards get their OWN budget (and are slower to list), so a big card can never
+// starve the internal-storage index.
+const SD_MAX_DIRS = 800;
+const SD_MAX_ENTRIES = 5000;
 const INDEX_FILE = 'searchindex.json';
 const SCAN_CACHE_FILE = 'scancache.json';
 const MEM_TTL = 5 * 60 * 1000; // in-memory freshness before a background rebuild
@@ -39,6 +44,7 @@ export interface IndexData {
   at: number;
   entries: IndexEntry[];
   truncated: boolean;
+  sd?: boolean; // built with the SD card(s) included (the Search block's opt-in)
 }
 export interface KwEntry {
   keyword: string;
@@ -69,14 +75,19 @@ interface DirEntry {
 let mem: IndexData | null = null;
 let building: Promise<IndexData> | null = null;
 
-async function walk(roots: string[]): Promise<{entries: IndexEntry[]; truncated: boolean}> {
+async function walk(
+  roots: string[],
+  skip: RegExp = SKIP_DIR,
+  maxDirs = MAX_DIRS,
+  maxEntries = MAX_ENTRIES,
+): Promise<{entries: IndexEntry[]; truncated: boolean}> {
   const out: IndexEntry[] = [];
   let frontier = roots.slice();
   const seen = new Set<string>();
   let dirs = 0;
   let truncated = false;
   while (frontier.length) {
-    if (dirs >= MAX_DIRS || out.length >= MAX_ENTRIES) {
+    if (dirs >= maxDirs || out.length >= maxEntries) {
       truncated = true;
       break;
     }
@@ -92,7 +103,7 @@ async function walk(roots: string[]): Promise<{entries: IndexEntry[]; truncated:
       for (const entries of lists) {
         for (const e of entries) {
           if (e.isDir) {
-            if (!SKIP_DIR.test(e.name)) {
+            if (!skip.test(e.name)) {
               out.push({name: e.name, path: e.path, isDir: true});
               next.push(e.path);
             }
@@ -111,8 +122,18 @@ async function walk(roots: string[]): Promise<{entries: IndexEntry[]; truncated:
 export async function buildIndex(): Promise<IndexData> {
   if (building) return building;
   building = (async () => {
-    const {entries, truncated} = await walk(INDEX_ROOTS);
-    const data: IndexData = {at: Date.now(), entries, truncated};
+    const sd = await searchSdEnabled();
+    const internal = await walk(INDEX_ROOTS);
+    const entries = internal.entries;
+    let truncated = internal.truncated;
+    if (sd) {
+      // Whole card (Supernote cards hold Note/, Document/… at the root), minus
+      // the system folders a card root exposes.
+      const card = await walk(await sdRoots(), SD_SYSTEM_DIR, SD_MAX_DIRS, SD_MAX_ENTRIES);
+      entries.push(...card.entries);
+      truncated = truncated || card.truncated;
+    }
+    const data: IndexData = {at: Date.now(), entries, truncated, sd};
     mem = data;
     try {
       const dir = await cacheDir();
@@ -131,7 +152,18 @@ export async function buildIndex(): Promise<IndexData> {
 
 /** Load the index for searching: memory → persisted snapshot → fresh build.
  *  A stale snapshot is returned immediately and refreshed in the background. */
+/** buildIndex() for a given SD scope: a build already in flight may have read
+ *  the opt-in BEFORE it was toggled, so if the one we joined has the wrong
+ *  scope, build once more (it has finished, so this one starts fresh). */
+async function buildForScope(sd: boolean): Promise<IndexData> {
+  const d = await buildIndex();
+  return !!d.sd === sd ? d : buildIndex();
+}
+
 export async function loadIndex(): Promise<IndexData> {
+  // The SD opt-in was toggled since this snapshot → its scope is wrong: rebuild.
+  const sd = await searchSdEnabled();
+  if (mem && !!mem.sd !== sd) return buildForScope(sd);
   if (mem && Date.now() - mem.at < MEM_TTL) return mem;
   if (!mem) {
     try {
@@ -142,11 +174,12 @@ export async function loadIndex(): Promise<IndexData> {
       /* no snapshot yet */
     }
   }
+  if (mem && !!mem.sd !== sd) return buildForScope(sd);
   if (mem) {
     if (Date.now() - mem.at >= MEM_TTL) buildIndex().catch(() => {}); // refresh, don't wait
     return mem;
   }
-  return buildIndex();
+  return buildForScope(sd);
 }
 
 /** Keywords from the Stars/Keywords scan cache (only folders that were scanned). */
@@ -172,7 +205,9 @@ export async function loadKeywords(): Promise<KwEntry[]> {
  *  in-memory copy, so we ask it rather than re-parsing toccache.json here. */
 export async function loadTitles(): Promise<TitleHit[]> {
   try {
-    return await allTitles();
+    const all = await allTitles();
+    // Headings read from a card stay cached, but only show while the opt-in is on.
+    return (await searchSdEnabled()) ? all : all.filter(t => !isSdPath(t.file));
   } catch {
     return [];
   }

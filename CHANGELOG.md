@@ -10,6 +10,27 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.1.23 — 2026-10-10
+
+### New
+- **SD card support.** Shortcuts, the Files block and every folder picker can now reach files on an SD
+  card (**Internal | SD card** at the top of the browser). Recent includes the card's files, and Search
+  can include them too with the new **"Also search the SD card"** option (off by default).
+- **Two heading-index buttons**, in both the Search and Contents settings: **↻ Update heading index**
+  (only re-reads what changed, takes seconds) and **⟲ Re-index all** (re-reads everything), with a
+  progress counter.
+
+### Fixed
+- **Contents shows the right heading.** A heading could show the wrong text (for example a date written
+  above it), or the same title twice after inserting a page.
+- **Recent follows what you open.** A file you opened now moves to the top and the rest of the list
+  slides down, instead of being replaced by the next one.
+- **Updating the heading index is fast again** and no longer re-reads your whole library; progress is
+  kept if the plugin is interrupted.
+- Typing a custom block height no longer redraws the block at every keystroke.
+
+---
+
 ## v2.1.9 — 2026-10-04
 
 ### Fixed

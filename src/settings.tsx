@@ -7,7 +7,7 @@
  * editor here; advanced users edit MyStyle/Plugins/Dashboard/config.json directly.
  */
 import React, {useEffect, useRef, useState} from 'react';
-import {Image, Modal as RNModal, NativeModules, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
+import {Image, Keyboard, Modal as RNModal, NativeModules, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
 
 const KOFI_QR = require('../assets/kofi-qr.png');
 
@@ -43,7 +43,9 @@ import {setRoute} from './route';
 import {leavePlugin} from './bubble';
 import {scanKeywords, basename, noteTitle} from './scanner';
 import {buildIndex} from './searchIndex';
-import {indexTitles} from './notetoc';
+import {indexTitles, IndexProgress, titleIndexStats} from './notetoc';
+import {formatScanTime} from './scancache';
+import {isSdPath, SD_SYSTEM_DIR, sdRoots, StorageRoot, storageRoots} from './storage';
 import {APP_BLOCK, CURATED_APPS} from './apps';
 import {Btn, fileGlyph as fileKindGlyph, ui} from './ui';
 import {ClockFace} from './clock';
@@ -621,12 +623,22 @@ function HeightRow({i, zone: z, update, vmode}: {i: number; zone: Zone; update: 
   // Commit as you type once the number is in range (the Supernote's handwriting
   // conversion doesn't reliably fire Done/blur, same reason as EditableTitle),
   // then clamp whatever is left in the field on Done / tap-away.
+  // Debounced: committing on every key saved (and repainted) each in-range
+  // prefix — typing 2500 drew a 25 px block on the way.
+  const pxTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearPxTimer = () => {
+    if (pxTimer.current) clearTimeout(pxTimer.current);
+    pxTimer.current = null;
+  };
+  useEffect(() => clearPxTimer, []);
   const onType = (t: string) => {
     setTxt(t);
+    clearPxTimer();
     const n = parseInt(t, 10);
-    if (n >= MIN_BLOCK_PX && n <= MAX_BLOCK_PX) setPx(n);
+    if (n >= MIN_BLOCK_PX && n <= MAX_BLOCK_PX) pxTimer.current = setTimeout(() => setPx(n), 700);
   };
   const commit = () => {
+    clearPxTimer();
     const n = parseInt(txt, 10);
     if (Number.isFinite(n)) setPx(n);
     else setTxt(String(blockHeightPx(z))); // unreadable entry -> back to the live height
@@ -957,8 +969,18 @@ const Mini = ({label, onPress, big}: {label: string; onPress: () => void; big?: 
  * the Supernote convert it to text does not always fire Done or a clean blur, so
  * without this the converted name would silently be lost.
  */
+// Keyboard trace: a user reported the keyboard only "flashing" when renaming a
+// block (v2.1.9, fine on v2.1.3). Logs focus/blur and keyboard show/hide so the
+// order against [state]/[bub] lines shows what takes the focus away.
+function kbLog(m: string) {
+  DashboardNative?.appendLog?.('[kb] ' + m).catch(() => {});
+}
+Keyboard.addListener('keyboardDidShow', () => kbLog('keyboard shown'));
+Keyboard.addListener('keyboardDidHide', () => kbLog('keyboard hidden'));
+
 function EditableTitle({value, onSave}: {value: string; onSave: (t: string) => void}) {
   const [editing, setEditing] = useState(false);
+  useEffect(() => kbLog(`title editor ${editing ? 'opened' : 'closed'}`), [editing]);
   const [t, setT] = useState(value);
   useEffect(() => setT(value), [value]);
 
@@ -1007,7 +1029,12 @@ function EditableTitle({value, onSave}: {value: string; onSave: (t: string) => v
         returnKeyType="done"
         blurOnSubmit
         onSubmitEditing={commit}
-        onEndEditing={commit}
+        onEndEditing={() => {
+          kbLog('title input: end editing');
+          commit();
+        }}
+        onFocus={() => kbLog('title input: focus')}
+        onBlur={() => kbLog('title input: blur')}
       />
     </View>
   );
@@ -1096,7 +1123,8 @@ const NOTE_START = STORAGE_ROOT + '/Note';
 
 async function listDirSorted(d: string): Promise<any[]> {
   try {
-    const list: any[] = (await DashboardNative.listDir(d)) ?? [];
+    let list: any[] = (await DashboardNative.listDir(d)) ?? [];
+    if (!d.startsWith(STORAGE_ROOT)) list = list.filter(e => !(e.isDir && SD_SYSTEM_DIR.test(e.name)));
     list.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1));
     return list;
   } catch {
@@ -1107,15 +1135,21 @@ const isOpenableFile = (name: string) => /\.(note|pdf|epub)$/i.test(name);
 const fileGlyph = (name: string) =>
   /\.pdf$/i.test(name) ? '📕 ' : /\.epub$/i.test(name) ? '📗 ' : /\.note$/i.test(name) ? '📄 ' : '   ';
 
-/** Directory-navigation state for the browser modal. */
+/** Directory-navigation state for the browser modal: stays within the storage
+ *  volume it is on (internal or an SD card); `roots` lets the UI switch volume. */
 function useDirBrowser() {
   const [dir, setDir] = useState(NOTE_START);
   const [entries, setEntries] = useState<any[]>([]);
+  const [roots, setRoots] = useState<StorageRoot[]>([{label: 'Internal', root: STORAGE_ROOT}]);
   const load = async (d: string) => {setEntries(await listDirSorted(d)); setDir(d);};
-  useEffect(() => {load(NOTE_START);}, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load(NOTE_START);
+    storageRoots().then(setRoots);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const root = roots.find(r => dir === r.root || dir.startsWith(r.root + '/'))?.root ?? STORAGE_ROOT;
   const parent = dir.substring(0, dir.lastIndexOf('/'));
-  const up = () => load(parent || STORAGE_ROOT);
-  return {dir, entries, load, up, atRoot: dir === STORAGE_ROOT};
+  const up = () => load(parent.length >= root.length ? parent : root);
+  return {dir, entries, load, up, atRoot: dir === root, roots, root};
 }
 
 /**
@@ -1124,7 +1158,7 @@ function useDirBrowser() {
  * folder, then Save adds them all at once.
  */
 function ShortcutBrowser({foldersOnly, onDone, onClose}: {foldersOnly?: boolean; onDone: (picks: Pick[]) => void; onClose: () => void}) {
-  const {dir, entries, load, up, atRoot} = useDirBrowser();
+  const {dir, entries, load, up, atRoot, roots, root} = useDirBrowser();
   const [picks, setPicks] = useState<Pick[]>([]);
   const has = (path: string) => picks.some(p => p.path === path);
   const toggle = (kind: 'folder' | 'file', path: string) =>
@@ -1143,6 +1177,13 @@ function ShortcutBrowser({foldersOnly, onDone, onClose}: {foldersOnly?: boolean;
           </TouchableOpacity>
         </View>
       </View>
+      {roots.length > 1 && (
+        <View style={ui.row}>
+          {roots.map(r => (
+            <Btn key={r.root} label={(r.root === root ? '● ' : '') + r.label} onPress={() => load(r.root)} small />
+          ))}
+        </View>
+      )}
       <View style={ui.row}>
         <Btn label="⬆" onPress={up} disabled={atRoot} small />
         <Btn label={has(dir) ? '✓ this folder added' : '＋ Add this folder'} onPress={() => toggle('folder', dir)} small />
@@ -1267,6 +1308,7 @@ function TocEditor({i, zone, update}: {i: number; zone: Extract<Zone, {type: 'to
   return (
     <View>
       <Text style={ui.subLabel}>Shows the headings of the note open behind the dashboard; tap one to jump to its page. OCR runs once per note (cached).</Text>
+      <HeadingIndexPanel />
       <Text style={ui.subLabel}>Indent by title level</Text>
       <Seg
         options={[{v: 'off', label: 'Off'}, {v: 'on', label: 'On'}]}
@@ -1468,36 +1510,117 @@ const CLOCK_LOCALES: {v: string; label: string}[] = [
   {v: 'ko-KR', label: 'KR'},
 ];
 
-function SearchEditor({i, zone, update, openModal}: EditorProps<'search'>) {
-  const on = !!zone.searchTitles;
-  const [busy, setBusy] = useState(false);
+/**
+ * The shared heading database (Contents block + note-title search use the same
+ * one). Two ways to (re)build it library-wide:
+ *  - Update: incremental — only pages whose fingerprint changed are re-read.
+ *  - Re-index all: re-reads EVERY page of every note, ignoring the cache (the
+ *    first full index; or to recover from a wrong cached heading). Slow.
+ */
+// One library-wide index run at a time, across both panels (Contents + Search):
+// with no visible progress the user tapped again and two runs overlapped.
+let indexRun: {force: boolean; p: IndexProgress | null} | null = null;
+const indexListeners = new Set<() => void>();
+const notifyIndex = () => indexListeners.forEach(f => f());
+// Every progress repaint is an e-ink refresh; repainting per note/page slowed the
+// whole index several-fold (the original code only updated every 10 notes). The
+// progress is recorded on every step but painted at most once per interval.
+const INDEX_PAINT_MS = 3000;
+let lastIndexPaint = 0;
+const paintIndexThrottled = () => {
+  const now = Date.now();
+  if (now - lastIndexPaint < INDEX_PAINT_MS) return;
+  lastIndexPaint = now;
+  notifyIndex();
+};
+
+function noteName(path?: string): string {
+  return path ? (path.split('/').pop() || path).replace(/\.note$/i, '') : '';
+}
+
+function HeadingIndexPanel() {
+  const [, setTick] = useState(0);
   const [status, setStatus] = useState('');
-  const indexNow = async () => {
-    if (busy) return;
-    setBusy(true);
-    setStatus('Indexing…');
+  const [stats, setStats] = useState<{notes: number; titles: number; lastIndexAt?: number; lastFullIndexAt?: number} | null>(null);
+  const refreshStats = () => titleIndexStats().then(setStats).catch(() => {});
+  useEffect(() => {
+    refreshStats();
+    const f = () => setTick(t => t + 1);
+    indexListeners.add(f);
+    return () => void indexListeners.delete(f);
+  }, []);
+  const run = async (force: boolean) => {
+    if (indexRun) return;
+    indexRun = {force, p: null};
+    setStatus('');
+    notifyIndex();
     try {
       // A fresh walk: loadIndex() can hand back a stale snapshot, and the purge
       // below deletes cached notes that aren't in this list.
       const idx = await buildIndex();
+      const mounted = await sdRoots();
       const notes = idx.entries.filter(e => !e.isDir && /\.note$/i.test(e.name)).map(e => e.path);
       if (!notes.length) {
         setStatus('No notes found to index.');
       } else {
+        const t0 = Date.now();
         const r = await indexTitles(
           notes,
-          (done, total) => {
-            if (done === total || done % 10 === 0) setStatus(`Indexing ${done}/${total}…`);
+          p => {
+            if (indexRun) indexRun.p = p;
+            paintIndexThrottled();
           },
-          !idx.truncated, // a capped walk isn't proof a note is gone
+          // Only forget notes this walk could have seen: a capped walk isn't proof a
+          // note is gone, and a card that is unplugged (or not opted in) keeps its
+          // cached headings for when it comes back.
+          idx.truncated ? false : p => !isSdPath(p) || (!!idx.sd && mounted.some(r => p.startsWith(r + '/'))),
+          force,
         );
-        setStatus(`Indexed ${r.titles} titles in ${r.notes} notes.`);
+        setStatus(`Done: ${r.titles} headings in ${r.notes} notes (${Math.round((Date.now() - t0) / 1000)} s).`);
       }
     } catch (e: any) {
       setStatus('Indexing failed' + (e && e.message ? `: ${e.message}` : '') + '.');
     }
-    setBusy(false);
+    indexRun = null;
+    notifyIndex();
+    refreshStats();
   };
+  const r = indexRun;
+  const p = r?.p;
+  const count = p ? ` (${Math.min(p.done + 1, p.total)}/${p.total})` : '';
+  const label = (force: boolean, idle: string) => (r ? (r.force === force ? `Working${count}…` : 'Busy…') : idle);
+  const live = r
+    ? p?.path
+      ? `${r.force ? 'Re-indexing' : 'Updating'} ${noteName(p.path)}${p.page ? ` · page ${p.page}/${p.pages}` : ''}`
+      : 'Listing notes…'
+    : '';
+  return (
+    <View style={{marginTop: 4}}>
+      <Text style={ui.subLabel}>
+        Heading index (shared by Contents and title search): {stats ? `${stats.titles} headings in ${stats.notes} notes` : '…'}
+        {stats ? ` · last library index ${formatScanTime(stats.lastFullIndexAt)}` : ''}
+      </Text>
+      <Text style={ui.subLabel}>
+        Headings carry no text, so each one is read by handwriting recognition and cached. Notes you edit are
+        refreshed automatically when the dashboard opens (up to 8 per open).
+      </Text>
+      <Text style={ui.subLabel}>Update: re-reads only the pages that changed since they were last read. Fast.</Text>
+      <Mini label={label(false, '↻ Update heading index')} onPress={() => run(false)} />
+      <Text style={ui.subLabel}>Re-index all: re-reads every page of every note, ignoring the cache. Can take several minutes.</Text>
+      <Mini label={label(true, '⟲ Re-index all')} onPress={() => run(true)} />
+      {live ? <Text style={ui.subLabel}>{live}</Text> : null}
+      {!r && status ? <Text style={ui.subLabel}>{status}</Text> : null}
+    </View>
+  );
+}
+
+function SearchEditor({i, zone, update, openModal}: EditorProps<'search'>) {
+  const on = !!zone.searchTitles;
+  const sdOn = !!zone.searchSd;
+  const [cards, setCards] = useState<number | null>(null);
+  useEffect(() => {
+    sdRoots().then(r => setCards(r.length)).catch(() => setCards(0));
+  }, []);
   return (
     <View>
       <Text style={ui.subLabel}>
@@ -1510,18 +1633,20 @@ function SearchEditor({i, zone, update, openModal}: EditorProps<'search'>) {
         value={on ? 'on' : 'off'}
         onChange={v => update(c => void ((c.zones[i] as any).searchTitles = v === 'on'))}
       />
-      {on && (
-        <View style={{marginTop: 4}}>
-          <Text style={ui.subLabel}>
-            Titles need a one-time OCR index (headings carry no text). Re-index after adding notes; it is incremental
-            (only changed pages are re-read), so later runs are fast.
-          </Text>
-          <Mini label={busy ? 'Indexing…' : '≣ Index titles now'} onPress={indexNow} />
-          {status ? <Text style={ui.subLabel}>{status}</Text> : null}
-        </View>
-      )}
+      {on && <HeadingIndexPanel />}
       <Text style={ui.subLabel}>Scope: folders to include (leave empty to search the whole device)</Text>
       <FoldersEditor i={i} folders={zone.folders ?? []} update={update} openModal={openModal} what="search" />
+      <Text style={ui.subLabel}>Also search the SD card</Text>
+      <Seg
+        options={[{v: 'off', label: 'Off'}, {v: 'on', label: 'On'}]}
+        value={sdOn ? 'on' : 'off'}
+        onChange={v => update(c => void ((c.zones[i] as any).searchSd = v === 'on'))}
+      />
+      <Text style={ui.subLabel}>
+        {cards === null ? '' : cards === 0 ? 'No SD card detected right now. ' : `${cards} SD card${cards > 1 ? 's' : ''} detected. `}
+        When on, file and folder names on the card are searchable{on ? ', and its notes’ headings once you update the heading index' : ''}. A card is
+        slower to scan; off by default.
+      </Text>
     </View>
   );
 }

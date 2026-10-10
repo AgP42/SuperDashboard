@@ -21,10 +21,11 @@
 import {NativeModules} from 'react-native';
 import {PluginFileAPI} from 'sn-plugin-lib';
 
-import {readPageRevs} from './notepage';
+import {noteFileSize, readPageRevs} from './notepage';
 import {cacheDir} from './paths';
 import {notesModifiedSince, NoteFile} from './scanner';
 import {recognize, recycleAll, unwrap} from './starText';
+import {sdRoots, searchSdEnabled} from './storage';
 
 const {DashboardNative} = NativeModules;
 const TOC_FILE = 'toccache.json';
@@ -50,11 +51,19 @@ function tlog(m: string): void {
 interface PageCache {
   rev: string;
   titles: TocEntry[];
+  hv?: number; // heading-reader version the titles were read with (see HEADING_V)
 }
+// Bumped when readPageTitles changes in a way that fixes already-cached text, so
+// pages that HAVE headings are re-read once (title-less pages are unaffected).
+// v3: lazy controlTrailNums were read as empty, so a heading fell back to an
+// overlapping text box (e.g. a template's typed date) instead of its own ink.
+const HEADING_V = 3;
+const staleHeadings = (pc: PageCache) => (pc.hv ?? 1) < HEADING_V && pc.titles.length > 0;
 interface CacheShape {
   version: number;
-  notes: Record<string, {pages: Record<string, PageCache>}>;
+  notes: Record<string, {pages: Record<string, PageCache>; size?: number}>; // size: file size when last read (skip-if-unchanged)
   lastIndexAt?: number; // watermark for the on-open auto-refresh (see autoRefreshTitles)
+  lastFullIndexAt?: number; // last library-wide index run (config buttons)
 }
 let mem: CacheShape | null = null;
 let dirty = false;
@@ -68,7 +77,7 @@ async function loadCache(): Promise<CacheShape> {
     if (text && text.trim()) {
       const obj = JSON.parse(text);
       // Discard a cache written by a different layout rather than mis-reading it.
-      if (obj && obj.notes && obj.version === CACHE_VERSION) mem = {version: CACHE_VERSION, notes: obj.notes, lastIndexAt: obj.lastIndexAt};
+      if (obj && obj.notes && obj.version === CACHE_VERSION) mem = {version: CACHE_VERSION, notes: obj.notes, lastIndexAt: obj.lastIndexAt, lastFullIndexAt: obj.lastFullIndexAt};
     }
   } catch {
     /* none yet */
@@ -85,9 +94,26 @@ async function persist(): Promise<void> {
     const dir = await cacheDir();
     await DashboardNative.writeFile(dir + TOC_FILE, JSON.stringify(mem));
     dirty = false;
-  } catch {
-    /* best-effort */
+  } catch (e: any) {
+    // Best-effort, but never silent: a failing save means every index run is lost.
+    tlog(`cache save FAILED: ${e && e.message}`);
   }
+}
+
+/** Entries of a list the firmware returns EITHER as a plain array OR as a lazy
+ *  ElementDataAccessor (size()/getRange()), capped at `cap`. */
+async function listAll(c: any, cap: number): Promise<any[]> {
+  try {
+    if (!c) return [];
+    if (Array.isArray(c)) return c.slice(0, cap);
+    if (typeof c.size === 'function' && typeof c.getRange === 'function') {
+      const n = await c.size();
+      return n ? (await c.getRange(0, Math.min(n, cap))) ?? [] : [];
+    }
+  } catch {
+    /* unreadable → none */
+  }
+  return [];
 }
 
 function cleanHeading(s: string): string {
@@ -122,21 +148,55 @@ async function readPageTitles(path: string, page0: number): Promise<TocEntry[]> 
     // A converted title's ink is gone; its text sits in a text box over its rect.
     const tboxes = els.filter(e => e && (e.type === 500 || e.type === 501 || e.type === 502) && e.textBox && e.textBox.textRect && e.textBox.textContentFull);
 
-    /** Text of a converted title: a field on the title, else the text box
-     *  overlapping the title's rect. '' when none. */
+    /** The heading's own rect (page pixels), or null. */
+    const rectOf = (t: any) => {
+      const x1 = t.title.X;
+      const y1 = t.title.Y;
+      if (typeof x1 !== 'number' || typeof y1 !== 'number') return null;
+      return {x1, y1, x2: x1 + (t.title.width || 0), y2: y1 + (t.title.height || 0)};
+    };
+
+    /** Text of a converted title: a field on the title, else a text box that sits
+     *  INSIDE the heading's rect (its centre in it). A mere overlap is not enough:
+     *  a template's typed date just above the heading overlapped it and was taken
+     *  for the heading's text. '' when none. */
     const typedTitleText = (t: any): string => {
       const d = cleanHeading(t.title.textContentFull || t.title.text || '');
       if (d) return d;
-      const x1 = t.title.X;
-      const y1 = t.title.Y;
-      if (typeof x1 !== 'number') return '';
-      const x2 = x1 + (t.title.width || 0);
-      const y2 = y1 + (t.title.height || 0);
+      const r0 = rectOf(t);
+      if (!r0) return '';
       for (const b of tboxes) {
         const r = b.textBox.textRect;
-        if (!(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1)) return cleanHeading(b.textBox.textContentFull);
+        const cx = (r.left + r.right) / 2;
+        const cy = (r.top + r.bottom) / 2;
+        if (cx >= r0.x1 && cx <= r0.x2 && cy >= r0.y1 && cy <= r0.y2) return cleanHeading(b.textBox.textContentFull);
       }
       return '';
+    };
+
+    /** Pen strokes lying inside the heading's rect: the fallback when the title
+     *  doesn't list its strokes. Strokes are EMR (rotated, per-element maxX/maxY
+     *  extent), converted to page pixels as in todomark. */
+    const strokesInRect = async (t: any, W: number, H: number): Promise<any[]> => {
+      const r0 = rectOf(t);
+      if (!r0 || !W || !H) return [];
+      const m = 8;
+      const out: any[] = [];
+      for (const e of strokeByNum.values()) {
+        const maxX = e.maxX || 0;
+        const maxY = e.maxY || 0;
+        if (!maxX || !maxY) continue;
+        const pts = await listAll(e.stroke?.points, 12);
+        if (!pts.length) continue;
+        let inside = 0;
+        for (const pt of pts) {
+          const px = W - (pt.y / maxY) * W;
+          const py = (pt.x / maxX) * H;
+          if (px >= r0.x1 - m && px <= r0.x2 + m && py >= r0.y1 - m && py <= r0.y2 + m) inside++;
+        }
+        if (inside * 2 > pts.length) out.push(e);
+      }
+      return out;
     };
 
     // Fetched only now: a page with no titles never pays for it, and a note with
@@ -144,13 +204,29 @@ async function readPageTitles(path: string, page0: number): Promise<TocEntry[]> 
     const size = unwrap<any>(await PluginFileAPI.getPageSize(path, page0));
     const out: TocEntry[] = [];
     for (const t of titles) {
-      const nums: number[] = Array.isArray(t.title.controlTrailNums) ? t.title.controlTrailNums : [];
-      const strokes = nums.map(n => strokeByNum.get(n)).filter(Boolean);
+      // controlTrailNums comes as a plain array OR a lazy accessor; reading only
+      // the array form left every accessor heading with no strokes at all.
+      const ct = t.title.controlTrailNums;
+      const nums: number[] = (await listAll(ct, 4000)).filter((n: any) => typeof n === 'number');
+      let strokes = nums.map(n => strokeByNum.get(n)).filter(Boolean);
+      let src = 'ink';
+      if (!strokes.length) {
+        strokes = await strokesInRect(t, size?.width || 0, size?.height || 0);
+        src = 'rect';
+      }
       const ocr = strokes.length ? cleanHeading(await recognize(strokes, size)) : '';
-      out.push({text: ocr || typedTitleText(t) || '(untitled)', page: page0 + 1, style: t.title.style || 1});
+      const typed = ocr ? '' : typedTitleText(t);
+      const text = ocr || typed || '(untitled)';
+      const via = ocr ? src : typed ? 'textbox' : 'none';
+      // Only the fallbacks are worth a line (a full re-index reads thousands of headings).
+      if (via !== 'ink')
+        tlog(`page ${page0}: heading s${t.title.style} nums=${nums.length}(${Array.isArray(ct) ? 'array' : ct ? 'accessor' : 'none'}) strokes=${strokes.length} via ${via} → "${text}"`);
+      out.push({text, page: page0 + 1, style: t.title.style || 1});
     }
     const unread = out.filter(t => t.text === '(untitled)').length;
-    tlog(`page ${page0}: ${out.length} titles${unread ? `, ${unread} unreadable` : ''}`);
+    // Only worth a line when something couldn't be read (a full index reads
+    // thousands of pages; a line each looked like "new titles found").
+    if (unread) tlog(`page ${page0}: ${out.length} titles, ${unread} unreadable`);
     return out;
   } finally {
     await recycleAll(els);
@@ -167,9 +243,40 @@ async function readPageTitles(path: string, page0: number): Promise<TocEntry[]> 
  * `flush: false` keeps the result in memory only — used by indexTitles, which
  * writes once for the whole run instead of once per note.
  */
-export async function readNoteToc(path: string, flush = true): Promise<{readable: boolean; titles: TocEntry[]}> {
+// One read per note at a time: the Contents block and the on-open auto-refresh
+// both asked for the same note at once and each paid the full OCR (2 × 27 s seen
+// on a 15-page note). A second caller now joins the read already in flight.
+const inflight = new Map<string, Promise<{readable: boolean; titles: TocEntry[]}>>();
+
+/** `force` re-reads every page, ignoring the cache (the "Re-index all" button). */
+export type PageProgress = (pagesRead: number, pagesToRead: number) => void;
+
+export function readNoteToc(path: string, flush = true, force = false, onPage?: PageProgress): Promise<{readable: boolean; titles: TocEntry[]}> {
+  const key = (force ? 'F|' : '') + path; // a forced read must not just join a cached one
+  const running = inflight.get(key);
+  // Joining a read started by a batching caller (flush=false: index run /
+  // auto-refresh) must still save when THIS caller wants it saved, or a kill
+  // before that batch's next save loses the result.
+  if (running) return flush ? running.then(async r => (await persist(), r)) : running;
+  const p = readNoteTocOnce(path, flush, force, onPage).finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+async function readNoteTocOnce(path: string, flush: boolean, force: boolean, onPage?: PageProgress): Promise<{readable: boolean; titles: TocEntry[]}> {
   if (!path || !/\.note$/i.test(path)) return {readable: false, titles: []};
   const cache = await loadCache();
+  // Unchanged file (same size: the format is append-only, every save grows it)
+  // → serve the cached headings without the per-page fingerprint reads, which
+  // cost ~3 native calls per page and made a library "Update" crawl through
+  // thousands of them for nothing.
+  const size = await noteFileSize(path);
+  const known = cache.notes[path];
+  if (!force && size > 0 && known?.size === size && !Object.values(known.pages).some(pc => pc && staleHeadings(pc))) {
+    const titles: TocEntry[] = [];
+    for (const k of Object.keys(known.pages).sort((a, b) => Number(a) - Number(b))) titles.push(...(known.pages[k]?.titles ?? []));
+    return {readable: true, titles};
+  }
   const revs = await readPageRevs(path);
   // Every page gets a rev so the result is always cacheable. A readable footer
   // gives a per-page rev (real incremental). Without one (rare), we fall back to
@@ -187,11 +294,18 @@ export async function readNoteToc(path: string, flush = true): Promise<{readable
     tlog(`no footer for ${path}; coarse-cached over ${total} pages`);
   }
 
-  const prev = cache.notes[path]?.pages ?? {};
+  const prev = force ? {} : cache.notes[path]?.pages ?? {};
   const next: Record<string, PageCache> = {};
   const titles: TocEntry[] = [];
   let ocrPages = 0;
+  let movedPages = 0;
+  let failedPages = 0;
   let capped = 0;
+  // Only revs carrying a PAGEID identify one page; a bare length (`:N`, notes
+  // without PAGEIDs), a '0' unreadable block or the coarse `nf:` fallback would
+  // match unrelated pages.
+  const prevByRev = new Map<string, PageCache>();
+  for (const pc of Object.values(prev)) if (pc && /^[^:]+:/.test(pc.rev) && !pc.rev.startsWith('nf:')) prevByRev.set(pc.rev, pc);
   for (const {page, rev} of pages) {
     if (page >= MAX_PAGES) {
       capped++;
@@ -199,32 +313,58 @@ export async function readNoteToc(path: string, flush = true): Promise<{readable
     }
     const key = String(page);
     const cached = prev[key];
-    if (cached && cached.rev === rev) {
+    if (cached && cached.rev === rev && !staleHeadings(cached)) {
       next[key] = cached; // unchanged page → reuse, no OCR
       titles.push(...cached.titles);
+      continue;
+    }
+    // Same page (PAGEID + content) cached under another index: it only moved
+    // (a page was inserted/deleted/reordered before it). Reuse its titles,
+    // renumbered, instead of re-OCR'ing it.
+    const moved = prevByRev.get(rev);
+    if (moved && !staleHeadings(moved)) {
+      const renum = {rev, titles: moved.titles.map(t => ({...t, page: page + 1})), hv: moved.hv};
+      next[key] = renum;
+      titles.push(...renum.titles);
+      movedPages++;
       continue;
     }
     let pageTitles: TocEntry[] = [];
     let ok = true;
     try {
+      onPage?.(page + 1, pages.length);
       pageTitles = await readPageTitles(path, page);
     } catch (e: any) {
       ok = false;
+      failedPages++;
       tlog(`page ${page} failed: ${e && e.message}`);
     }
-    if (ok) next[key] = {rev, titles: pageTitles}; // only cache a page we read cleanly
+    if (ok) next[key] = {rev, titles: pageTitles, hv: HEADING_V}; // only cache a page we read cleanly
     titles.push(...pageTitles);
     ocrPages++;
   }
   if (capped) tlog(`capped: ${capped} pages beyond ${MAX_PAGES} skipped for ${path}`);
-  const changed = ocrPages > 0 || Object.keys(prev).length !== Object.keys(next).length;
+  // Remember the file size only when every page was read cleanly: a failed page
+  // isn't cached, and a matching size would otherwise skip it forever.
+  const sizeToKeep = failedPages ? undefined : size || undefined;
+  const changed = ocrPages > 0 || movedPages > 0 || Object.keys(prev).length !== Object.keys(next).length || known?.size !== sizeToKeep;
   if (changed) {
-    cache.notes[path] = {pages: next};
+    cache.notes[path] = {pages: next, size: sizeToKeep};
     dirty = true;
     if (flush) await persist();
   }
-  tlog(`toc ${path}: ${titles.length} titles, re-read ${ocrPages}/${pages.length} pages`);
+  tlog(`toc ${path}: ${titles.length} titles, re-read ${ocrPages}/${pages.length} pages${movedPages ? `, ${movedPages} moved` : ''}`);
   return {readable: true, titles};
+}
+
+/** Where a library-wide index run is: `done` of `total` notes finished; while a
+ *  note is being read, `path` and (when pages are re-read) `page` of `pages`. */
+export interface IndexProgress {
+  done: number;
+  total: number;
+  path?: string;
+  page?: number;
+  pages?: number;
 }
 
 /**
@@ -234,18 +374,30 @@ export async function readNoteToc(path: string, flush = true): Promise<{readable
  * cache is written ONCE at the end. First run pays the OCR cost; later runs are
  * near-instant.
  */
-export async function indexTitles(notePaths: string[], onProgress?: (done: number, total: number) => void, prune = true): Promise<{notes: number; titles: number}> {
+export async function indexTitles(
+  notePaths: string[],
+  onProgress?: (p: IndexProgress) => void,
+  prune: boolean | ((path: string) => boolean) = true, // a function limits pruning to paths it accepts
+  force = false, // re-read every page of every note (ignore the cache)
+): Promise<{notes: number; titles: number}> {
   const total = notePaths.length;
   const t0 = Date.now();
   let titles = 0;
   for (let i = 0; i < total; i++) {
     try {
-      const r = await readNoteToc(notePaths[i], false); // one write for the whole run
+      onProgress?.({done: i, total, path: notePaths[i]});
+      const r = await readNoteToc(notePaths[i], false, force, (pg, pgs) =>
+        onProgress?.({done: i, total, path: notePaths[i], page: pg, pages: pgs}),
+      ); // one write for the whole run
       titles += r.titles.filter(t => t.text !== '(untitled)').length;
     } catch (e: any) {
       tlog(`index ${notePaths[i]} failed: ${e && e.message}`);
     }
-    onProgress?.(i + 1, total);
+    onProgress?.({done: i + 1, total, path: notePaths[i]});
+    // Save as we go: a full index is ~an hour of OCR, and the plugin can be
+    // killed mid-run (reinstall, host teardown). Saving only at the end lost
+    // the whole run on any interruption.
+    if ((i + 1) % 5 === 0) await persist();
   }
   const cache = await loadCache();
   // Forget notes that were deleted or renamed, so search can't offer dead pages.
@@ -254,7 +406,7 @@ export async function indexTitles(notePaths: string[], onProgress?: (done: numbe
   if (prune) {
     const live = new Set(notePaths);
     for (const p of Object.keys(cache.notes)) {
-      if (!live.has(p)) {
+      if (!live.has(p) && (prune === true || prune(p))) {
         delete cache.notes[p];
         dirty = true;
       }
@@ -263,9 +415,10 @@ export async function indexTitles(notePaths: string[], onProgress?: (done: numbe
   // A full index IS the watermark: notes edited after it starts are caught by the
   // next on-open auto-refresh. Use the start time so an edit during indexing isn't missed.
   cache.lastIndexAt = t0;
+  cache.lastFullIndexAt = t0; // before the save, or it is never written
   dirty = true;
   await persist();
-  tlog(`indexTitles: ${total} notes, ${titles} titles`);
+  tlog(`indexTitles${force ? ' (full re-read)' : ''}: ${total} notes, ${titles} titles in ${Math.round((Date.now() - t0) / 1000)}s`);
   return {notes: total, titles};
 }
 
@@ -295,7 +448,7 @@ export async function autoRefreshTitles(): Promise<{modified: number; done: numb
     const t0 = Date.now();
     let modified: NoteFile[] = [];
     try {
-      modified = await notesModifiedSince(since);
+      modified = await notesModifiedSince(since, (await searchSdEnabled()) ? await sdRoots() : []);
     } catch {
       return {modified: 0, done: 0, capped: false};
     }
@@ -331,6 +484,18 @@ export async function autoRefreshTitles(): Promise<{modified: number; done: numb
   } finally {
     refreshing = false;
   }
+}
+
+/** What the shared heading database holds (shown in the config panel). */
+export async function titleIndexStats(): Promise<{notes: number; titles: number; lastIndexAt?: number; lastFullIndexAt?: number}> {
+  const cache = await loadCache();
+  let notes = 0;
+  let titles = 0;
+  for (const note of Object.values(cache.notes)) {
+    notes++;
+    for (const pc of Object.values(note?.pages ?? {})) titles += (pc?.titles ?? []).filter(t => t.text && t.text !== '(untitled)').length;
+  }
+  return {notes, titles, lastIndexAt: cache.lastIndexAt, lastFullIndexAt: cache.lastFullIndexAt};
 }
 
 /** The titles already in the cache for one note, WITHOUT any footer read or OCR.

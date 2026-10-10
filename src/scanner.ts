@@ -9,6 +9,7 @@ import {PluginCommAPI, PluginFileAPI, PluginNoteAPI} from 'sn-plugin-lib';
 import {starLineImages, starLineTexts, LineImg, unwrap} from './starText';
 import {LineMode} from './config';
 import {cacheDir, LEGACY_CACHE_DIR} from './paths';
+import {SD_SYSTEM_DIR, sdRoots} from './storage';
 
 const {DashboardNative} = NativeModules;
 
@@ -461,7 +462,13 @@ async function scanKeywordsImpl(
 const RECENT_ROOTS = ['/storage/emulated/0/Note', '/storage/emulated/0/Document'];
 const RECENT_EXT = /\.(note|pdf|epub)$/i;
 let recentCache: {at: number; files: string[]} | null = null;
-const RECENT_TTL = 60_000; // re-walk at most once a minute (dashboard reopens are cheap)
+const RECENT_TTL = 5_000; // only dedupes the simultaneous reads at dashboard open: notes are saved ~30 s after
+// closing, so a longer cache hid the file just opened (Recent looked frozen in quick tests).
+let sdRecentCache: {at: number; key: string; files: {path: string; mtime: number}[]} | null = null;
+const SD_RECENT_TTL = 60_000;
+function recentLog(m: string): void {
+  DashboardNative?.appendLog?.('[recent] ' + m).catch(() => {});
+}
 
 /** Most-recently-MODIFIED notes/documents under the in-scope folders, newest first.
  *  A safe stand-in for /Recent/Recent.txt (recently OPENED), which the Chauvet
@@ -471,10 +478,97 @@ export async function recentModifiedFiles(limit: number): Promise<string[]> {
   const now = Date.now();
   if (recentCache && now - recentCache.at < RECENT_TTL) return recentCache.files.slice(0, limit);
   const out: {path: string; mtime: number}[] = [];
-  let frontier = RECENT_ROOTS.slice();
+  await walkRecent(RECENT_ROOTS, SKIP_DIR, 400, out);
+  // Mounted SD cards too (whole card, minus its system folders), on their own
+  // budget so a big card can't crowd out internal storage.
+  // The card walk is slow, so it keeps its own longer cache: a file just opened
+  // from the card still shows at once via the open-history below.
+  const cards = await sdRoots();
+  if (!cards.length) {
+    sdRecentCache = null;
+  } else {
+    const key = cards.join('|');
+    if (!sdRecentCache || sdRecentCache.key !== key || now - sdRecentCache.at >= SD_RECENT_TTL) {
+      const sd: {path: string; mtime: number}[] = [];
+      await walkRecent(cards, SD_SYSTEM_DIR, 200, sd);
+      sdRecentCache = {at: now, key, files: sd};
+    }
+    out.push(...sdRecentCache.files);
+  }
+  // The file open behind the dashboard is the most recent one by definition, but
+  // the firmware only saves (= bumps its mtime) ~30 s after it is closed, and
+  // never for a file only read. Pin it, AND remember it: the firmware's own
+  // open history (/Recent) is off-limits, so this is our own. Without it a file
+  // only viewed fell straight back out of Recent as soon as another was opened.
+  const opened = await loadOpened();
+  try {
+    const cur = unwrap<string>(await PluginCommAPI.getCurrentFilePath());
+    if (cur && RECENT_EXT.test(cur)) {
+      out.push({path: cur, mtime: now + 1});
+      await rememberOpened(opened, cur, now);
+    }
+  } catch {
+    /* no file open (launcher) */
+  }
+  // Rank every file by its latest activity: modified OR seen open.
+  // (a remembered file that was since deleted or renamed must not come back)
+  const alive = await Promise.all(opened.map(o => DashboardNative.fileExists(o.path).catch(() => false)));
+  opened.forEach((o, i) => alive[i] && out.push({path: o.path, mtime: o.at}));
+  out.sort((a, b) => b.mtime - a.mtime);
+  // A pinned current file also appears with its real mtime: keep the first only.
+  const seenPath = new Set<string>();
+  for (let i = 0; i < out.length; ) {
+    if (seenPath.has(out[i].path)) out.splice(i, 1);
+    else seenPath.add(out[i++].path);
+  }
+  recentLog('top: ' + out.slice(0, 5).map(f => `${basename(f.path)} ${Math.round((now - f.mtime) / 60000)}min`).join(' | '));
+  const files = out.map(f => f.path);
+  recentCache = {at: now, files};
+  return files.slice(0, limit);
+}
+
+// ---- Our own "seen open" history (files open behind the dashboard) ----------
+const OPENED_FILE = 'opened.json';
+const OPENED_MAX = 30;
+let openedMem: {path: string; at: number}[] | null = null;
+
+async function loadOpened(): Promise<{path: string; at: number}[]> {
+  if (openedMem) return openedMem;
+  openedMem = [];
+  try {
+    const dir = await cacheDir();
+    const text: string = await DashboardNative.readTextFile(dir + OPENED_FILE);
+    const arr = text && text.trim() ? JSON.parse(text) : [];
+    if (Array.isArray(arr)) openedMem = arr.filter((o: any) => o && typeof o.path === 'string' && typeof o.at === 'number');
+  } catch {
+    /* none yet */
+  }
+  return openedMem;
+}
+
+/** Move `path` to the front of the history (newest first), capped, and persist. */
+async function rememberOpened(list: {path: string; at: number}[], path: string, at: number): Promise<void> {
+  if (list[0]?.path === path) {
+    list[0].at = at; // still the same file: just refresh its time
+  } else {
+    const i = list.findIndex(o => o.path === path);
+    if (i >= 0) list.splice(i, 1);
+    list.unshift({path, at});
+    if (list.length > OPENED_MAX) list.length = OPENED_MAX;
+  }
+  try {
+    const dir = await cacheDir();
+    await DashboardNative.writeFile(dir + OPENED_FILE, JSON.stringify(list));
+  } catch {
+    /* best-effort */
+  }
+}
+
+async function walkRecent(roots: string[], skip: RegExp, maxDirs: number, out: {path: string; mtime: number}[]): Promise<void> {
+  let frontier = roots.slice();
   const seen = new Set<string>();
   let dirs = 0;
-  while (frontier.length && dirs < 400) {
+  while (frontier.length && dirs < maxDirs) {
     const batch = frontier.filter(d => !seen.has(d));
     batch.forEach(d => seen.add(d));
     const next: string[] = [];
@@ -487,7 +581,7 @@ export async function recentModifiedFiles(limit: number): Promise<string[]> {
       for (const entries of lists) {
         for (const e of entries) {
           if (e.isDir) {
-            if (!SKIP_DIR.test(e.name)) next.push(e.path);
+            if (!skip.test(e.name)) next.push(e.path);
           } else if (RECENT_EXT.test(e.name)) {
             out.push({path: e.path, mtime: e.mtime});
           }
@@ -496,19 +590,18 @@ export async function recentModifiedFiles(limit: number): Promise<string[]> {
     }
     frontier = next;
   }
-  out.sort((a, b) => b.mtime - a.mtime);
-  const files = out.map(f => f.path);
-  recentCache = {at: now, files};
-  return files.slice(0, limit);
 }
 
 /** Note files (path + mtime) modified strictly after `since`, OLDEST-first, over
  *  the whole device. Reuses the shared walk cache (free when Stars/Keywords have
  *  already walked the same scope). Drives the title index's auto-refresh: the
  *  caller re-reads only these notes and advances its watermark through them. */
-export async function notesModifiedSince(since: number): Promise<NoteFile[]> {
+export async function notesModifiedSince(since: number, extraRoots: string[] = []): Promise<NoteFile[]> {
   const {files} = await collectNotes([]);
-  return files.filter(f => f.mtime > since).sort((a, b) => a.mtime - b.mtime);
+  // Extra roots (SD cards, when the Search block opts in) are walked separately
+  // so a card gets its own walk budget instead of eating the device's.
+  const extra = extraRoots.length ? (await collectNotes(extraRoots)).files : [];
+  return [...files, ...extra].filter(f => f.mtime > since).sort((a, b) => a.mtime - b.mtime);
 }
 
 export function basename(path: string): string {
