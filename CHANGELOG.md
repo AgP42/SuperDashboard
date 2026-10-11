@@ -10,6 +10,15 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.1.25 — 2026-10-11
+
+### Fixed
+- **A pasted handwriting clip stays selected**, like with the official Sticker plugin, so you can drag it
+  into place right away, even when you pasted it over existing writing. Its **↩ source** link now lands
+  right under it.
+
+---
+
 ## v2.1.23 — 2026-10-10
 
 ### New

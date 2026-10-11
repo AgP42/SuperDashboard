@@ -277,7 +277,8 @@ the capture is silent.
 (Note groups clips under a per-note header); Display Handwriting / OCR text / Both; filter by source
 folders and/or labels.
 **Good to know:** Display OCR/Both needs **"OCR text"** on in Look : Note capture. **📋 Paste Ink** drops
-a handwriting clip back as **editable strokes** (move, resize, even rewrite it); an OCR clip (and a PDF
+a handwriting clip back as **editable strokes** (move, resize, even rewrite it), and they stay **selected**
+after pasting, so you can drag them into place right away; an OCR clip (and a PDF
 text clip) pastes as an editable text box. Each gets a **↩ source** link back to where it came from,
 which follows the page even if you reorder it or move it to another note. **PDF / EPUB captures are
 dashboard-only**: nothing is drawn on the document (a PDF can't take the plugin's marks), and a text
