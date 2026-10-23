@@ -499,7 +499,7 @@ async function handleLassoToClip(kind) {
       ...(typeof savedMarkNum === 'number' ? {markNum: savedMarkNum} : {}),
       createdAt: Date.now(),
     });
-    blog(`[clip] added ${kind} ${id} from ${path} p.${page}${autoLabels.length ? ` labels="${autoLabels.join(', ')}"` : ''}`);
+    blog(`[clip] added ${kind} ${id} p.${page} labels=${autoLabels.length}`);
     ToastAndroid.show(autoLabels.length ? `✓ Added · ${autoLabels.join(', ')}` : '✓ Added to Dashboard', ToastAndroid.SHORT);
 
     // Background OCR (opt-in): control is already back with the user (toast
@@ -518,7 +518,7 @@ async function handleLassoToClip(kind) {
             if (txt) {
               await updateClipText(id, txt);
               DeviceEventEmitter.emit('dashboard_refresh_all'); // if the dashboard is open, swap to text
-              blog(`[clip] ocr ok ${id} (${txt.length} chars) "${txt.slice(0, 80)}"`);
+              blog(`[clip] ocr ok ${id} (${txt.length} chars)`);
             } else {
               blog(`[clip] ocr empty ${id} -> image fallback`);
             }

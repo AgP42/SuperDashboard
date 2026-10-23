@@ -435,8 +435,14 @@ a problem fixed.
    **SuperDashboard version** (Settings → Apps → Plugins).
 
 **Privacy:** the log contains the **names and folders of your notes and documents** (for example from
-Recent or Contents) and technical events. It never contains what you wrote in your notes. Feel free to
-read it before sending it.
+Recent or Contents) and technical events. OCR capture diagnostics record only a character count;
+captured text and automatic label contents are not logged. `MyStyle` may sync to Supernote Cloud,
+and diagnostics are also mirrored to Android logcat, so review logs before sharing them.
+
+**Older logs:** unpatched v2.1.25 logged an OCR text preview and automatic labels. Installing a
+patched build does not remove existing logs, logcat entries, or cloud copies. Review those copies
+and remove sensitive diagnostics yourself if needed; the plugin does not automatically delete
+your files or change your cloud settings.
 
 ### Supporting the project
 
