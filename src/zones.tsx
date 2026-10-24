@@ -1481,7 +1481,7 @@ function renderKeywords(
   noteSort: 'recent' | 'name',
   ts: TScale,
 ) {
-  if (display === 'inline') return renderInline(hits, noteSort, ts);
+  if (display === 'inline') return sort === 'note' ? renderInline(hits, noteSort, ts) : renderInlineByKeyword(hits, noteSort, ts);
   if (display === 'byfolder') return renderByFolder(hits, noteSort, ts);
   return sort === 'note' ? renderListByNote(hits, noteSort, ts) : renderListByKeyword(hits, ts);
 }
@@ -1555,6 +1555,23 @@ function renderInline(hits: KeywordHit[], noteSort: 'recent' | 'name', ts: TScal
           ))}
       </View>
     ));
+}
+
+// inline · by keyword: #keyword on the left, then a "Note p.N" chip per occurrence
+// on the same line (issue #4: inline used to ignore "Group by: Keyword")
+function renderInlineByKeyword(hits: KeywordHit[], noteSort: 'recent' | 'name', ts: TScale) {
+  const cmp = noteCmp(noteSort);
+  return groupByKeyword(hits).map(([kw, list], i) => (
+    <View key={i} style={[ui.row, {marginTop: 5, alignItems: 'center'}]}>
+      <Text style={[ui.inlineKw, ts.head, {marginRight: 6}]}>#{kw}</Text>
+      {list
+        .slice()
+        .sort((a, b) => cmp(a, b) || a.page - b.page)
+        .map((h, j) => (
+          <KwChip key={j} ts={ts} label={`${noteTitle(h.file)} p.${h.page}`} onPress={() => openFile(h.file, h.page)} />
+        ))}
+    </View>
+  ));
 }
 
 // byfolder: parent folder → note → keyword chips

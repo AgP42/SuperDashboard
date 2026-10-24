@@ -10,6 +10,14 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.1.27 — 2026-10-24
+
+### Fixed
+- **Keywords "Group by: Keyword" now works in the Inline view**: each line shows the keyword, followed
+  by a chip per note and page. It used to stay grouped by note (thanks @BradleyMoore, #4).
+
+---
+
 ## v2.1.26 — 2026-10-24
 
 ### Fixed
