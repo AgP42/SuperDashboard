@@ -10,6 +10,18 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.1.26 — 2026-10-24
+
+### Fixed
+- **The debug log no longer contains what you wrote.** Captured OCR text, automatic labels and
+  recognised note headings are now logged as counts only (thanks to @kleleu69 for the report and
+  fix). Logs written by older versions are not removed; see the user guide's *Support* section.
+
+### Changed
+- The plugin can now also be built on Windows (contributed by @kleleu69).
+
+---
+
 ## v2.1.25 — 2026-10-11
 
 ### Fixed

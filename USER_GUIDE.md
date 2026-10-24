@@ -439,8 +439,8 @@ Recent or Contents) and technical events. OCR capture diagnostics record only a 
 captured text and automatic label contents are not logged. `MyStyle` may sync to Supernote Cloud,
 and diagnostics are also mirrored to Android logcat, so review logs before sharing them.
 
-**Older logs:** unpatched v2.1.25 logged an OCR text preview and automatic labels. Installing a
-patched build does not remove existing logs, logcat entries, or cloud copies. Review those copies
+**Older logs:** v2.1.25 and earlier logged an OCR text preview, automatic labels and some note
+headings. Updating to v2.1.26 or later does not remove existing logs, logcat entries, or cloud copies. Review those copies
 and remove sensitive diagnostics yourself if needed; the plugin does not automatically delete
 your files or change your cloud settings.
 

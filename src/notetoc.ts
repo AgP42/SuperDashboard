@@ -220,7 +220,7 @@ async function readPageTitles(path: string, page0: number): Promise<TocEntry[]> 
       const via = ocr ? src : typed ? 'textbox' : 'none';
       // Only the fallbacks are worth a line (a full re-index reads thousands of headings).
       if (via !== 'ink')
-        tlog(`page ${page0}: heading s${t.title.style} nums=${nums.length}(${Array.isArray(ct) ? 'array' : ct ? 'accessor' : 'none'}) strokes=${strokes.length} via ${via} → "${text}"`);
+        tlog(`page ${page0}: heading s${t.title.style} nums=${nums.length}(${Array.isArray(ct) ? 'array' : ct ? 'accessor' : 'none'}) strokes=${strokes.length} via ${via} → ${text === '(untitled)' ? 'untitled' : `${text.length} chars`}`); // no note content in logs
       out.push({text, page: page0 + 1, style: t.title.style || 1});
     }
     const unread = out.filter(t => t.text === '(untitled)').length;

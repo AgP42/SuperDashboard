@@ -141,7 +141,7 @@ export async function detectUnderlineLabels(pageSize: Size, els: any[]): Promise
         const chosen = strokes.filter(s => xHit(s.box) && s.box.y1 <= L.lineY + tol && s.box.y2 >= top).map(s => s.el);
         if (chosen.length === 0) continue;
         const txt = unwrapR(await PluginCommAPI.recognizeElements(chosen, pageSize));
-        ulog(`line y=${Math.round(L.lineY)} x=[${Math.round(L.lxMin)},${Math.round(L.lxMax)}] chosen=${chosen.length} medH=${Math.round(medH)} up=${Math.round(up)} tol=${Math.round(tol)} raw="${typeof txt === 'string' ? txt : ''}"`);
+        ulog(`line y=${Math.round(L.lineY)} x=[${Math.round(L.lxMin)},${Math.round(L.lxMax)}] chosen=${chosen.length} medH=${Math.round(medH)} up=${Math.round(up)} tol=${Math.round(tol)} raw=${typeof txt === 'string' ? txt.length : 0} chars`); // length only: no note content in logs
         const lab = cleanLabel(typeof txt === 'string' ? txt : '');
         if (lab && !seen.has(lab)) {
           seen.add(lab);

@@ -72,9 +72,7 @@ The Windows build defaults to `Release`, selects only that variant's custom nati
 and stops if native compilation or packaging fails. Use `-BuildVariant Debug` only for development;
 do not deploy a debug build for regular use. The internal `app.npk` is loaded by PluginHost, not
 installed as a standalone APK. USB-copy the `.snplg` into `MyStyle`, then use the device's plugin
-installer; copying alone does not activate the plugin. Local security changes redact OCR text,
-automatic labels, and the lasso capture's source path from capture diagnostics. Existing diagnostic
-files and cloud copies are not deleted.
+installer; copying alone does not activate the plugin.
 
 ## Support
 
