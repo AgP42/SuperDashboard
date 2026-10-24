@@ -134,7 +134,7 @@ function DashboardScreen(): React.JSX.Element {
   };
   // One block. In 'fixed' mode a non-spacer, non-collapsed block gets a set height
   // and scrolls inside; otherwise it takes its natural height.
-  const renderZone = (z: DashboardConfig['zones'][number], i: number) => {
+  const renderZone = (z: DashboardConfig['zones'][number], i: number, cols = columns) => {
     const el = (
       <ZoneView
         zone={z}
@@ -146,7 +146,7 @@ function DashboardScreen(): React.JSX.Element {
         index={i}
         onToggleCollapse={toggleCollapse}
         showIcons={cfg!.showIcons}
-        columns={columns}
+        columns={cols}
       />
     );
     // Fixed mode reserves each block's slot height; INCLUDING when collapsed, so
@@ -161,6 +161,14 @@ function DashboardScreen(): React.JSX.Element {
     return <View key={i}>{el}</View>;
   };
   const colOf = (z: DashboardConfig['zones'][number]) => Math.max(0, Math.min(columns - 1, z.col ?? 0));
+  // Full-width blocks (issue #3): across all columns, above or below the grid, in
+  // list order. Meaningless with one column, where every block is full width and
+  // keeps its list position.
+  const spanOf = (z: DashboardConfig['zones'][number]) => (columns > 1 ? z.span : undefined);
+  const band = (where: 'top' | 'bottom') => {
+    const list = (cfg?.zones ?? []).map((z, i) => ({z, i})).filter(({z}) => spanOf(z) === where);
+    return list.length ? <View style={{paddingHorizontal: 4}}>{list.map(({z, i}) => renderZone(z, i, 1))}</View> : null;
+  };
 
   // Header chrome adopts the chosen design + font + text size (same ThemedButton as
   // the in-card Refresh buttons), so it stops looking like a heavy black box.
@@ -189,14 +197,19 @@ function DashboardScreen(): React.JSX.Element {
       )}
       {cfg && (
         <ScrollView style={{flex: 1}}>
+          {band('top')}
           {/* Each column is its own independent vertical stack (heights differ freely). */}
           <View style={ui.zoneGrid}>
             {Array.from({length: columns}).map((_, ci) => (
               <View key={ci} style={ui.zoneCol}>
-                {cfg.zones.map((z, i) => ({z, i})).filter(({z}) => colOf(z) === ci).map(({z, i}) => renderZone(z, i))}
+                {cfg.zones
+                  .map((z, i) => ({z, i}))
+                  .filter(({z}) => !spanOf(z) && colOf(z) === ci)
+                  .map(({z, i}) => renderZone(z, i))}
               </View>
             ))}
           </View>
+          {band('bottom')}
         </ScrollView>
       )}
     </View>

@@ -72,6 +72,9 @@ export interface ZoneCommon {
   hpx?: number;
   /** Collapsed → only the title + an expand arrow show. */
   collapsed?: boolean;
+  /** Full width: shown across all columns, above ('top') or below ('bottom') the
+   *  column grid, in list order. Absent = a normal block in its column. */
+  span?: 'top' | 'bottom';
 }
 
 /** Emoji per block type: used in the config canvas, the add menu, and (optionally)
@@ -325,6 +328,8 @@ function normalize(raw: any): DashboardConfig {
     const hpx = typeof z.hpx === 'number' ? Math.round(z.hpx) : NaN;
     if (hpx >= MIN_BLOCK_PX && hpx <= MAX_BLOCK_PX) nz.hpx = hpx;
     else delete nz.hpx;
+    if (z.span === 'top' || z.span === 'bottom') nz.span = z.span;
+    else delete nz.span;
     return nz as Zone;
   });
   const scan: ScanSettings = {

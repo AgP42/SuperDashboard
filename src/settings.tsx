@@ -400,7 +400,9 @@ const ADDABLE: Zone['type'][] = ['shortcuts', 'stars', 'keywords', 'apps', 'rece
 function blockLabel(z: Zone): string {
   if (z.type === 'spacer') return `▢ empty · ${blockHeightPx(z)}px`;
   const ic = ZONE_ICONS[z.type] ?? '•';
-  return `${ic} ${z.title && z.title !== '' ? z.title : ZONE_LABELS[z.type] ?? z.type}`;
+  const name = `${ic} ${z.title && z.title !== '' ? z.title : ZONE_LABELS[z.type] ?? z.type}`;
+  // A full-width block still lists under its column here; say where it shows.
+  return z.span ? `${name} ⇔ ${z.span}` : name;
 }
 
 // ===== Step 2: Sections (per-column placement + 🔧 per-block config) =======
@@ -419,8 +421,9 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
         <MiniPage
           theme={cfg.theme}
           cols={columns}
-          zones={cfg.zones.map(z => ({type: z.type, title: z.title, col: colOf(z)}))}
+          zones={cfg.zones.map(z => ({type: z.type, title: z.title, col: colOf(z), span: z.span}))}
           width={270}
+          grow
         />
       </View>
 
@@ -465,7 +468,7 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
                     )}
                     {openCfg === i && (
                       <View style={ui.cfgExpander}>
-                        <ZoneContentEditor i={i} zone={z} update={update} openModal={openModal} vmode={cfg.layout.vmode} ocrGlobal={(cfg.clipText ?? 'hand') === 'ocr'} />
+                        <ZoneContentEditor i={i} zone={z} update={update} openModal={openModal} vmode={cfg.layout.vmode} columns={cfg.layout.columns} ocrGlobal={(cfg.clipText ?? 'hand') === 'ocr'} />
                       </View>
                     )}
                   </View>
@@ -543,6 +546,7 @@ function ZoneContentEditor({
   update,
   openModal,
   vmode,
+  columns,
   ocrGlobal,
 }: {
   i: number;
@@ -550,6 +554,7 @@ function ZoneContentEditor({
   update: UP;
   openModal: (m: Modal) => void;
   vmode: 'masonry' | 'fixed';
+  columns: number;
   ocrGlobal: boolean;
 }) {
   const showHeight = vmode === 'fixed' || z.type === 'spacer';
@@ -603,6 +608,26 @@ function ZoneContentEditor({
       )}
       {z.type === 'toc' && <TocEditor i={i} zone={z} update={update} />}
       {showHeight && <HeightRow i={i} zone={z} update={update} vmode={vmode} />}
+      {columns > 1 && (
+        <View>
+          <Text style={ui.subLabel}>Width</Text>
+          <Seg
+            options={[
+              {v: 'col', label: 'In its column'},
+              {v: 'top', label: 'Full width, top'},
+              {v: 'bottom', label: 'Full width, bottom'},
+            ]}
+            value={z.span ?? 'col'}
+            onChange={v =>
+              update(c => {
+                const zz = c.zones[i] as ZoneCommon;
+                if (v === 'top' || v === 'bottom') zz.span = v;
+                else delete zz.span;
+              })
+            }
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -823,7 +848,7 @@ function AppsEditor({i, zone, update, openModal}: EditorProps<'apps'>) {
 }
 
 // ===== schematic snapshot / preview ========================================
-type MiniZ = {type: Zone['type']; title?: string; col?: number};
+type MiniZ = {type: Zone['type']; title?: string; col?: number; span?: 'top' | 'bottom'};
 const sampleZones: MiniZ[] = [
   {type: 'shortcuts', title: 'Shortcuts'},
   {type: 'stars', title: 'Stars'},
@@ -841,18 +866,28 @@ function Snap({on, label, width, onPress, children}: {on: boolean; label: string
 }
 
 /** A schematic portrait mini-page: real page shape, labelled zone boxes. */
-function MiniPage({theme, cols, zones, width}: {theme: Theme; cols: number; zones: MiniZ[]; width: number}) {
+function MiniPage({theme, cols, zones, width, grow}: {theme: Theme; cols: number; zones: MiniZ[]; width: number; grow?: boolean}) {
   const height = Math.round((width * 4) / 3);
   const columns: MiniZ[][] = Array.from({length: cols}, () => []);
+  // Full-width blocks (span) sit above / below the columns, as on the dashboard.
+  const span = (z: MiniZ) => (cols > 1 ? z.span : undefined);
   zones.forEach((z, i) => {
+    if (span(z)) return;
     const c = typeof z.col === 'number' ? Math.max(0, Math.min(cols - 1, z.col)) : i % cols;
     columns[c].push(z);
   });
+  const band = (where: 'top' | 'bottom') =>
+    zones.filter(z => span(z) === where).map((z, zi) => <MiniZone key={where + zi} theme={theme} label={z.title || z.type} />);
   return (
-    <View style={[ui.miniPage, {width, height}]}>
+    // Page height is a MINIMUM: when the blocks don't fit, the page grows rather
+    // than letting a long column run under the bottom full-width band. flexGrow
+    // (not flex: 1, whose 0 basis ignores the content) keeps the columns at their
+    // real height, so the bottom band always sits below the longest column.
+    <View style={[ui.miniPage, grow ? {width, minHeight: height} : {width, height}]}>
       <Text style={ui.miniPageTitle}>SuperDashboard</Text>
       {zones.length === 0 && <Text style={{fontSize: 9, color: '#999', marginTop: 6}}>empty: add sections</Text>}
-      <View style={{flexDirection: 'row', flex: 1}}>
+      {band('top')}
+      <View style={{flexDirection: 'row', flexGrow: 1}}>
         {columns.map((col, ci) => (
           <View key={ci} style={{flex: 1, marginRight: ci < cols - 1 ? 4 : 0}}>
             {col.map((z, zi) => (
@@ -861,6 +896,7 @@ function MiniPage({theme, cols, zones, width}: {theme: Theme; cols: number; zone
           </View>
         ))}
       </View>
+      {band('bottom')}
     </View>
   );
 }

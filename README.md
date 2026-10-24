@@ -3,8 +3,8 @@
 A configurable, always-available dashboard for Supernote e-ink devices. Its face is a draggable
 **bubble** (the house logo) that floats over everything; tap it to open the dashboard, drag it to move
 it (or open it from the plugin's toolbar button). You compose the dashboard yourself from **modules**,
-in 1, 2 or 3 columns, in the design and font you like. It runs **fully on-device and offline**: no
-account, no network.
+in 1, 2 or 3 columns (any block can also span the full width, on top or at the bottom), in the design
+and font you like. It runs **fully on-device and offline**: no account, no network.
 
 ![The dashboard](docs/img/dashboard-hero2.png)
 

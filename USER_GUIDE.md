@@ -108,6 +108,13 @@ blank to hide it). A live preview sits on top.
 |---|---|
 | ![Sections](docs/img/config-sections.png) | ![Add block](docs/img/config-addblock.png) |
 
+**Full-width blocks.** With 2 or 3 columns, a block's **🔧** has a **Width** option: **In its column**
+(default), **Full width, top** or **Full width, bottom**. Full-width blocks span every column, above or
+below the column grid, in list order; in the Sections list they show **⇔ top** / **⇔ bottom** next to
+their name. Handy for a search bar or a clock across the whole page.
+
+![Full-width blocks: Clock and Search on top, Device at the bottom](docs/img/full-width.png)
+
 Each block also has a **ⓘ** button with quick, precise help on its options (What it does · How to
 configure · Good to know) right on the device:
 

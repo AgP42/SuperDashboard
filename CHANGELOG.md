@@ -10,6 +10,15 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.1.29 — 2026-10-24
+
+### New
+- **Full-width blocks.** With 2 or 3 columns, any block can span the whole width, above or below the
+  columns (block 🔧 → **Width**): handy for a search bar or a clock across the page (thanks
+  @cchrysostomou, #3).
+
+---
+
 ## v2.1.27 — 2026-10-24
 
 ### Fixed
