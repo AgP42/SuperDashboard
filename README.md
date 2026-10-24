@@ -60,6 +60,22 @@ source ../env.sh                    # JDK 21 + Android SDK on PATH
 Capabilities validated on A5X + Manta are written up in `docs/FINDINGS.md` and the `supernote-plugin-dev`
 skill under `.claude/skills/`.
 
+On Windows, with Node.js, JDK 17 or newer and the Android SDK installed:
+
+```powershell
+npm.cmd ci --ignore-scripts --no-audit --no-fund
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk" # adjust for your SDK installation
+.\buildPlugin.ps1 # release native code, ARM64; build\outputs\SuperDashboard.snplg
+```
+
+The Windows build defaults to `Release`, selects only that variant's custom native package,
+and stops if native compilation or packaging fails. Use `-BuildVariant Debug` only for development;
+do not deploy a debug build for regular use. The internal `app.npk` is loaded by PluginHost, not
+installed as a standalone APK. USB-copy the `.snplg` into `MyStyle`, then use the device's plugin
+installer; copying alone does not activate the plugin. Local security changes redact OCR text,
+automatic labels, and the lasso capture's source path from capture diagnostics. Existing diagnostic
+files and cloud copies are not deleted.
+
 ## Support
 
 SuperDashboard is a personal project built by a Supernote user, for Supernote users. If it saves you a

@@ -1,3 +1,10 @@
+param(
+    [ValidateSet('Release', 'Debug')]
+    [string]$BuildVariant = 'Release'
+)
+
+$ErrorActionPreference = 'Stop'
+
 # PowerShell Script: Analyze Android Dependencies and Generate PluginConfig.json
 
 # Set color output function
@@ -727,10 +734,10 @@ function Build-AndroidApk {
     try {
         Set-Location $androidDir
         
-        # Execute gradle build - use custom buildCustomApkDebug task
+        $buildTask = "buildCustomApk$BuildVariant"
         $gradlewPath = Join-Path $androidDir 'gradlew.bat'
         if (Test-Path $gradlewPath) {
-            Write-ColorOutput 'Using gradlew.bat to execute buildCustomApkDebug task...' 'Green'
+            Write-ColorOutput "Using gradlew.bat to execute $buildTask task..." 'Green'
             
             # Ensure JAVA_HOME environment variable is set
             if (-not $env:JAVA_HOME) {
@@ -752,13 +759,13 @@ function Build-AndroidApk {
             }
             
             # Execute gradle build
-            $process = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'gradlew.bat', 'buildCustomApkDebug' -Wait -PassThru -NoNewWindow
-            $buildResult = $process.ExitCode
+            & $gradlewPath $buildTask '-PreactNativeArchitectures=arm64-v8a' '--console=plain' | Out-Host
+            $buildResult = $LASTEXITCODE
         }
         elseif (Get-Command 'gradle' -ErrorAction SilentlyContinue) {
-            Write-ColorOutput 'Using gradle to execute buildCustomApkDebug task...' 'Green'
-            $process = Start-Process -FilePath 'gradle' -ArgumentList 'buildCustomApkDebug' -Wait -PassThru -NoNewWindow
-            $buildResult = $process.ExitCode
+            Write-ColorOutput "Using gradle to execute $buildTask task..." 'Green'
+            & gradle $buildTask '-PreactNativeArchitectures=arm64-v8a' '--console=plain' | Out-Host
+            $buildResult = $LASTEXITCODE
         }
         else {
             Write-ColorOutput 'Neither gradle nor gradlew.bat found, cannot build APK' 'Red'
@@ -783,25 +790,8 @@ function Build-AndroidApk {
 function Copy-ApkAndUpdateConfig {
     param([string]$ProjectRoot, [string]$BuildGeneratedDir, [string]$BuildGeneratedConfigFile)
     
-    # Find generated APK file - prioritize custom APK
-    $apkSearchPath = Join-Path $ProjectRoot 'android\app\build\outputs\apk'
-    
-    # First look for custom APK files
-    $customApkFiles = Get-ChildItem -Path $apkSearchPath -Recurse -Filter '*custom*.apk' -ErrorAction SilentlyContinue
-    $apkPath = $null
-    
-    if ($customApkFiles) {
-        $apkPath = $customApkFiles[0].FullName
-        Write-ColorOutput "Found custom APK file: $apkPath" 'Green'
-    }
-    else {
-        # If no custom APK found, look for other APK files
-        $apkFiles = Get-ChildItem -Path $apkSearchPath -Recurse -Filter '*.apk' -ErrorAction SilentlyContinue
-        if ($apkFiles) {
-            $apkPath = $apkFiles[0].FullName
-            Write-ColorOutput "Found APK file: $apkPath" 'Green'
-        }
-    }
+    $variant = $BuildVariant.ToLowerInvariant()
+    $apkPath = Join-Path $ProjectRoot "android\app\build\outputs\apk\$variant\app-$variant-custom.apk"
     
     if (-not $apkPath -or -not (Test-Path $apkPath)) {
         Write-ColorOutput 'Generated APK file not found' 'Red'
@@ -1067,29 +1057,29 @@ function New-ZipPackage {
     }
     
     try {
-        # Use PowerShell 5.0+ Compress-Archive command
-        if (Get-Command 'Compress-Archive' -ErrorAction SilentlyContinue) {
-            # If target file already exists, delete it first
-            if (Test-Path $DestinationPath) {
-                Remove-Item $DestinationPath -Force
-            }
-            
-            # Get all files and folders in source directory
-            $sourceItems = Get-ChildItem -Path $SourceDir -Recurse
-            if ($sourceItems.Count -eq 0) {
-                Write-ColorOutput 'Source directory is empty, cannot create zip file' 'Yellow'
-                return $false
-            }
-            
-            # Create zip file
-            Compress-Archive -Path "$SourceDir\*" -DestinationPath $DestinationPath -Force
-            Write-ColorOutput "Zip file created successfully: $DestinationPath" 'Green'
-            return $true
-        }
-        else {
-            Write-ColorOutput 'System does not support Compress-Archive command, cannot create zip file' 'Red'
+        $sourceItems = @(Get-ChildItem -LiteralPath $SourceDir -Recurse -File)
+        if ($sourceItems.Count -eq 0) {
+            Write-ColorOutput 'Source directory is empty, cannot create zip file' 'Red'
             return $false
         }
+        Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+        if (Test-Path -LiteralPath $DestinationPath) {
+            Remove-Item -LiteralPath $DestinationPath -Force
+        }
+        $archive = [IO.Compression.ZipFile]::Open($DestinationPath, [IO.Compression.ZipArchiveMode]::Create)
+        try {
+            $prefix = (Get-Item -LiteralPath $SourceDir).FullName.TrimEnd('\') + '\'
+            foreach ($item in $sourceItems) {
+                # Android ZIP resource names must not contain Windows separators.
+                $entryName = $item.FullName.Substring($prefix.Length).Replace('\', '/')
+                $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                    $archive, $item.FullName, $entryName, [IO.Compression.CompressionLevel]::Optimal)
+            }
+        } finally {
+            $archive.Dispose()
+        }
+        Write-ColorOutput "Zip file created successfully: $DestinationPath" 'Green'
+        return $true
     }
     catch {
         Write-ColorOutput "Failed to create zip file: $_" 'Red'
@@ -1138,7 +1128,7 @@ function Main {
     Test-OperatingSystem
 
     $selfCheckOk = Self-CheckScriptIntegrity -ScriptPath $PSCommandPath
-    if (-not $selfCheckOk) { return }
+    if (-not $selfCheckOk) { throw 'Build script integrity check failed' }
     
     # Set project root directory to current directory
     $projectRoot = Get-Location
@@ -1161,8 +1151,7 @@ function Main {
     Write-ColorOutput '=== Step 2: Execute React Native bundling ===' 'Blue'
     $bundleSuccess = Build-ReactNativeBundle -ProjectRoot $projectRoot -ProjectName $projectName -OutputDir $buildGeneratedDir
     if (-not $bundleSuccess) {
-        Write-ColorOutput 'React Native bundling failed, script terminated' 'Red'
-        return
+        throw 'React Native bundling failed'
     }
     
     # Step 3: Check if PluginConfig.json file exists in root directory
@@ -1213,14 +1202,14 @@ function Main {
         if ($buildSuccess) {
             Write-ColorOutput '=== Step 11: Copy APK and update nativeCodePackage ===' 'Blue'
             $apkCopied = Copy-ApkAndUpdateConfig -ProjectRoot $projectRoot -BuildGeneratedDir $buildGeneratedDir -BuildGeneratedConfigFile $buildGeneratedConfigFile
-            if (-not $apkCopied) { Write-ColorOutput 'Failed to copy APK or update configuration' 'Red' }
+            if (-not $apkCopied) { throw 'Failed to copy APK or update configuration' }
         } else {
-            Write-ColorOutput 'Gradle build failed, skipping APK copy and configuration update' 'Red'
+            throw 'Gradle build failed; refusing to package incomplete or stale native code'
         }
 
         # Step 12: Parse Autolinking source PackageList.java, filter and merge
         Write-ColorOutput '=== Step 12: Parse Autolinking PackageList.java and merge lists ===' 'Blue'
-        $excludePkgs = @('com.facebook.react.shell.MainReactPackage', 'com.ratta.supernote.pluginlib.PluginPackage')
+        $excludePkgs = @('com.facebook.react.shell.MainReactPackage', 'com.ratta.supernote.pluginlib.PluginPackage', 'com.ratta.supernote.note.plugincore.PluginPackage')
         $pkgFromAutolinking = Get-ReactPackagesFromAutolinkingSource -ProjectRoot $projectRoot -Exclude $excludePkgs
 
         $allPkgs = @()
@@ -1243,20 +1232,17 @@ function Main {
     # Create build/outputs directory
     $buildOutputsDir = New-BuildOutputsDirectory -ProjectRoot $projectRoot
     if (-not $buildOutputsDir) {
-        Write-ColorOutput 'Unable to create build/outputs directory, skipping packaging step' 'Red'
-        return
+        throw 'Unable to create build/outputs directory'
     }
     
     # Check if build/generated directory exists and is not empty
     if (-not (Test-Path $buildGeneratedDir)) {
-        Write-ColorOutput 'build/generated directory does not exist, cannot package' 'Red'
-        return
+        throw 'build/generated directory does not exist, cannot package'
     }
     
     $generatedItems = Get-ChildItem -Path $buildGeneratedDir -Recurse
     if ($generatedItems.Count -eq 0) {
-        Write-ColorOutput 'build/generated directory is empty, cannot package' 'Yellow'
-        return
+        throw 'build/generated directory is empty, cannot package'
     }
     
     # Create temporary zip file
@@ -1266,15 +1252,14 @@ function Main {
     # Package build/generated directory
     $zipResult = New-ZipPackage -SourceDir $buildGeneratedDir -DestinationPath $tempZipPath
     if (-not $zipResult) {
-        Write-ColorOutput 'Packaging failed, unable to create zip file' 'Red'
-        return
+        throw 'Packaging failed, unable to create zip file'
     }
     
     # Rename to .snplg file
     $snplgFileName = "$($packageInfo.Name).snplg"
     $finalSnplgPath = Join-Path $buildOutputsDir $snplgFileName
-    $null = Rename-ToSnplgFile -ZipFilePath $tempZipPath -ProjectName $packageInfo.Name -OutputDir $buildOutputsDir
-    if (Test-Path $finalSnplgPath) {
+    $renamedPath = Rename-ToSnplgFile -ZipFilePath $tempZipPath -ProjectName $packageInfo.Name -OutputDir $buildOutputsDir
+    if ($renamedPath -and (Test-Path $finalSnplgPath)) {
         Write-ColorOutput "Plugin package successfully generated: $finalSnplgPath" 'Green'
         
         # Display file size information
@@ -1282,7 +1267,7 @@ function Main {
         $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
         Write-ColorOutput "File size: $fileSizeMB MB" 'Blue'
     } else {
-        Write-ColorOutput 'Failed to rename to .snplg file' 'Red'
+        throw 'Failed to rename to .snplg file'
     }
 }
 
