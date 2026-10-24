@@ -45,12 +45,13 @@ export const HELP: Record<string, HelpEntry> = {
     title: 'Stars',
     what: 'Every starred (★) page from the last scan, grouped by note.',
     how: 'Folders to scan: add some, or leave empty for the whole device. Note order: By date / By name. Line preview: Off, Image, or Text (OCR the line, image if it fails). "Allow deleting a star": On adds a ✕★ to remove a star from the note (keeps the text).',
-    good: 'Image/Text previews make the scan slower; scanning is incremental, so later refreshes are fast. Rescan with the ↻ in the block header.',
+    good: 'Tap a notebook’s name to fold / unfold its stars (remembered); "Notebooks: Folded by default" gives a compact list of notebooks. Image/Text previews make the scan slower; scanning is incremental, so later refreshes are fast. Rescan with the ↻ in the block header.',
   },
   keywords: {
     title: 'Keywords',
     what: 'Your notes’ keywords as tappable chips; each opens its note on the right page.',
     how: 'Folders to scan (empty = whole device). Note order: By date / By name. Group by: Keyword or Note. View: List, Inline or By folder. "+ Keyword" limits the block to chosen ones; "Show all" clears the filter.',
+    good: 'When grouped by note, tap a notebook’s name to fold / unfold its keywords (remembered); they can also start folded.',
   },
   clock: {
     title: 'Clock',

@@ -89,9 +89,10 @@ The Look step is grouped into **collapsible cards** (tap a card's header to fold
 
 - **Layout & theme**: **1 / 2 / 3** columns (each an independent vertical stack); **vertical flow**
   (Masonry = natural height, or Fixed height = a set height that scrolls inside — Short / Medium / Tall
-  or an exact px value, set per block); one of **9 designs**
-  (Ledger, Boxed, Airy, Grid black, Grid grey, Compact, Card, Minimal, Underline), previewed on your own
-  layout; and the **bubble** On / Off.
+  or an exact px value, set per block); **corners** (the design's own rounding, **Square**, or a
+  **Custom** radius set with − / ＋, applied to the block frames and the dashboard buttons); one of
+  **9 designs** (Ledger, Boxed, Airy, Grid black, Grid grey, Compact, Card, Minimal, Underline), previewed
+  live on your own layout and corners; and the **bubble** On / Off.
 - **Text & font**: **text size** and an independent **heading size** (S / M / L / XL); the **font**
   (System default, or any `.ttf` / `.otf` you drop into `MyStyle/fonts`); **block icons** show/hide.
 - **Note capture**: defaults for Clips & To-dos (the on-note **frame**, the **↩ source** link, and
@@ -214,9 +215,11 @@ file you only looked at, without opening the dashboard over it, doesn't show up.
 
 **What it does:** every starred (★) page from the last scan, grouped by note.
 **How to configure:** folders to scan (empty = whole device); Note order By date / By name; Line preview
-Off / Image / Text (OCR); "Allow deleting a star" adds a **✕★** to remove a star from the note.
-**Good to know:** Image/Text previews make the scan slower; scanning is incremental. Rescan with the
-**↻** in the block header.
+Off / Image / Text (OCR); "Allow deleting a star" adds a **✕★** to remove a star from the note;
+**Notebooks** expanded or folded by default.
+**Good to know:** tap a notebook's name to fold / unfold its stars (▸ / ▾, remembered); a folded one
+shows how many it hides. Image/Text previews make the scan slower; scanning is incremental. Rescan with
+the **↻** in the block header.
 
 | The Stars block | Its configuration |
 |---|---|
@@ -227,7 +230,8 @@ Off / Image / Text (OCR); "Allow deleting a star" adds a **✕★** to remove a 
 **What it does:** your notes' keywords as tappable chips; each opens its note on the right page.
 **How to configure:** folders to scan (empty = whole device); Note order By date / By name; Group by
 Keyword / Note; View List / Inline / By folder; **＋ Keyword** limits the block to chosen ones, "Show
-all" clears the filter.
+all" clears the filter. When grouped by note, **Notebooks** can start expanded or folded.
+**Good to know:** in note groups, tap a notebook's name to fold / unfold its keywords (remembered).
 
 | The Keywords block | Its configuration |
 |---|---|

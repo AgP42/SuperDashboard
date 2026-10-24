@@ -27,7 +27,8 @@ const {DashboardNative} = NativeModules;
 // open/leave chains.
 let clipOpening = false;
 import {getStars, setStars, getKeywords, setKeywords, formatScanTime, shouldAutoScan} from './scancache';
-import {fileGlyph, ThemedButton, ui} from './ui';
+import {cornerRadius, fileGlyph, ThemedButton, ui} from './ui';
+import {NoteFold, useNoteFold} from './notefold';
 
 /** Scaled style overrides for tappable text (bigger targets = fewer mis-taps). */
 export interface TScale {
@@ -1214,8 +1215,9 @@ function ZoneFrame({
   const hasHead = shownTitle.trim() !== '' || !!meta || collapsed || !!onRefresh;
   const sp = frameSpec(theme, hs, tf);
   const HeaderTag: any = collapsible ? TouchableOpacity : View;
+  const r = cornerRadius(); // the user's corner radius, if set (Look → Corners)
   return (
-    <View style={sp.frame}>
+    <View style={r === undefined ? sp.frame : [sp.frame, {borderRadius: r}]}>
       {hasHead && (
         <HeaderTag style={sp.header} {...(collapsible ? {onPress: chrome.onToggle, activeOpacity: 0.6} : {})}>
           <Text style={sp.label} numberOfLines={1}>
@@ -1337,6 +1339,7 @@ function StarsZone({zone, scan, theme, ts, sib, nonce}: {zone: Extract<Zone, {ty
   });
 
   const canDelete = zone.canDelete ?? false;
+  const fold = useNoteFold('stars', !!zone.notesFolded);
   const removeStar = async (file: string, page: number, index: number) => {
     const ok = await NativeUIUtils.showRattaDialog(
       `Delete this ★ on p.${page} of "${noteTitle(file)}"? (the handwriting is kept)`,
@@ -1371,8 +1374,8 @@ function StarsZone({zone, scan, theme, ts, sib, nonce}: {zone: Extract<Zone, {ty
       );
     return notes.map((n, i) => (
           <View key={i}>
-            <Text style={[ui.noteHead, ts.head]}>★ {noteTitle(n.file)}</Text>
-            {n.pages.map((p, j) => {
+            <NoteFoldHead fold={fold} file={n.file} ts={ts} label={`★ ${noteTitle(n.file)}`} count={n.pages.reduce((s, p) => s + p.count, 0)} />
+            {!fold.isFolded(n.file) && n.pages.map((p, j) => {
               // one row per star (top→bottom), so delete can target a single star
               const n2 = Math.max(p.lines?.length ?? 0, p.texts?.length ?? 0, p.count);
               return Array.from({length: n2}).map((_, k) => {
@@ -1409,7 +1412,7 @@ function StarsZone({zone, scan, theme, ts, sib, nonce}: {zone: Extract<Zone, {ty
           </View>
         ));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cached, zone, ts]);
+  }, [cached, zone, ts, fold.state]);
   return (
     <ZoneFrame theme={theme} hs={ts.hs} font={ts.font} title={zoneTitle(zone.title, 'Stars')} meta={busy ? progress || 'scan…' : meta} onRefresh={() => refresh(true)} refreshing={busy}>
       {!cached && !busy && <Text style={ui.empty}>(↻ to list stars; first scan is slow, next are fast)</Text>}
@@ -1431,6 +1434,7 @@ function KeywordsZone({zone, scan, theme, ts, sib, nonce}: {zone: Extract<Zone, 
     setKeywords(folders, {at: Date.now(), hits: res.hits, truncated: res.truncated, total: res.total});
   });
 
+  const fold = useNoteFold('keywords', !!zone.notesFolded);
   const meta = `${zone.sort === 'note' ? 'by note' : 'by keyword'} · ${formatScanTime(cached?.at)}`;
   // Memoized: grouping/sorting hundreds of hits on every progress tick was a
   // full-zone e-ink re-render of unchanged results.
@@ -1443,9 +1447,10 @@ function KeywordsZone({zone, scan, theme, ts, sib, nonce}: {zone: Extract<Zone, 
             zone.display ?? 'list',
             zone.noteSort ?? 'recent',
             ts,
+            fold,
           )
         : null,
-    [cached, zone, ts],
+    [cached, zone, ts, fold.state], // eslint-disable-line react-hooks/exhaustive-deps
   );
   return (
     <ZoneFrame theme={theme} hs={ts.hs} font={ts.font} title={zoneTitle(zone.title, 'Keywords')} meta={busy ? progress || 'scan…' : meta} onRefresh={() => refresh(true)} refreshing={busy}>
@@ -1480,10 +1485,26 @@ function renderKeywords(
   display: KeywordDisplay,
   noteSort: 'recent' | 'name',
   ts: TScale,
+  fold: NoteFold,
 ) {
-  if (display === 'inline') return sort === 'note' ? renderInline(hits, noteSort, ts) : renderInlineByKeyword(hits, noteSort, ts);
-  if (display === 'byfolder') return renderByFolder(hits, noteSort, ts);
-  return sort === 'note' ? renderListByNote(hits, noteSort, ts) : renderListByKeyword(hits, ts);
+  if (display === 'inline') return sort === 'note' ? renderInline(hits, noteSort, ts, fold) : renderInlineByKeyword(hits, noteSort, ts);
+  if (display === 'byfolder') return renderByFolder(hits, noteSort, ts, fold);
+  return sort === 'note' ? renderListByNote(hits, noteSort, ts, fold) : renderListByKeyword(hits, ts);
+}
+
+/** A notebook's group header in Stars / Keywords: tap to fold or unfold its
+ *  stars or keywords. A folded group shows how many it hides. */
+function NoteFoldHead({fold, file, ts, label, count, style}: {fold: NoteFold; file: string; ts: TScale; label: string; count: number; style?: any}) {
+  const folded = fold.isFolded(file);
+  return (
+    <TouchableOpacity onPress={() => fold.toggle(file)} activeOpacity={0.6} style={{flexDirection: 'row', alignItems: 'center'}}>
+      <Text style={[style ?? ui.noteHead, ts.head, {flex: 1}]} numberOfLines={1}>
+        {label}
+        {folded ? `  (${count})` : ''}
+      </Text>
+      <Text style={[ui.noteHead, ts.head, {marginLeft: 6}]}>{folded ? '▸' : '▾'}</Text>
+    </TouchableOpacity>
+  );
 }
 
 /** A tappable bordered keyword chip. Opens the exact note+page it refers to. */
@@ -1522,39 +1543,49 @@ function renderListByKeyword(hits: KeywordHit[], ts: TScale) {
 }
 
 // list · by note: note title, then a tappable #keyword chip per occurrence
-function renderListByNote(hits: KeywordHit[], noteSort: 'recent' | 'name', ts: TScale) {
+function renderListByNote(hits: KeywordHit[], noteSort: 'recent' | 'name', ts: TScale, fold: NoteFold) {
   return groupByNote(hits)
     .sort(noteCmp(noteSort))
     .map(({file, list}, i) => (
       <View key={i} style={{marginTop: 6}}>
-        <Text style={[ui.noteHead, ts.head]}>{noteTitle(file)}</Text>
-        <View style={ui.row}>
+        <NoteFoldHead fold={fold} file={file} ts={ts} label={noteTitle(file)} count={list.length} />
+        {!fold.isFolded(file) && <View style={ui.row}>
           {list
             .slice()
             .sort((a, b) => a.page - b.page)
             .map((h, j) => (
               <KwChip key={j} ts={ts} label={`#${h.keyword} p.${h.page}`} onPress={() => openFile(h.file, h.page)} />
             ))}
-        </View>
+        </View>}
       </View>
     ));
 }
 
 // inline: compact; note title + wrapped keyword chips on the same block
-function renderInline(hits: KeywordHit[], noteSort: 'recent' | 'name', ts: TScale) {
+function renderInline(hits: KeywordHit[], noteSort: 'recent' | 'name', ts: TScale, fold: NoteFold) {
   return groupByNote(hits)
     .sort(noteCmp(noteSort))
-    .map(({file, list}, i) => (
-      <View key={i} style={[ui.row, {marginTop: 5, alignItems: 'center'}]}>
-        <Text style={[ui.inlineKw, ts.head, {marginRight: 6}]}>{noteTitle(file)}</Text>
-        {list
-          .slice()
-          .sort((a, b) => a.page - b.page)
-          .map((h, j) => (
-            <KwChip key={j} ts={ts} label={`#${h.keyword} p.${h.page}`} onPress={() => openFile(h.file, h.page)} />
-          ))}
-      </View>
-    ));
+    .map(({file, list}, i) => {
+      const folded = fold.isFolded(file);
+      return (
+        <View key={i} style={[ui.row, {marginTop: 5, alignItems: 'center'}]}>
+          <TouchableOpacity onPress={() => fold.toggle(file)} activeOpacity={0.6}>
+            <Text style={[ui.inlineKw, ts.head, {marginRight: 6}]}>
+              {folded ? '▸ ' : '▾ '}
+              {noteTitle(file)}
+              {folded ? `  (${list.length})` : ''}
+            </Text>
+          </TouchableOpacity>
+          {!folded &&
+            list
+              .slice()
+              .sort((a, b) => a.page - b.page)
+              .map((h, j) => (
+                <KwChip key={j} ts={ts} label={`#${h.keyword} p.${h.page}`} onPress={() => openFile(h.file, h.page)} />
+              ))}
+        </View>
+      );
+    });
 }
 
 // inline · by keyword: #keyword on the left, then a "Note p.N" chip per occurrence
@@ -1575,7 +1606,7 @@ function renderInlineByKeyword(hits: KeywordHit[], noteSort: 'recent' | 'name', 
 }
 
 // byfolder: parent folder → note → keyword chips
-function renderByFolder(hits: KeywordHit[], noteSort: 'recent' | 'name', ts: TScale) {
+function renderByFolder(hits: KeywordHit[], noteSort: 'recent' | 'name', ts: TScale, fold: NoteFold) {
   const g = new Map<string, KeywordHit[]>();
   for (const h of hits) {
     const f = parentFolder(h.file);
@@ -1588,15 +1619,17 @@ function renderByFolder(hits: KeywordHit[], noteSort: 'recent' | 'name', ts: TSc
         .sort(noteCmp(noteSort))
         .map(({file, list: nl}, j) => (
           <View key={j} style={{marginLeft: 8}}>
-            <Text style={[ui.pageLine, ts.page]}>{noteTitle(file)}</Text>
-            <View style={ui.row}>
-              {nl
-                .slice()
-                .sort((a, b) => a.page - b.page)
-                .map((h, k) => (
-                  <KwChip key={k} ts={ts} label={`#${h.keyword} p.${h.page}`} onPress={() => openFile(h.file, h.page)} />
-                ))}
-            </View>
+            <NoteFoldHead fold={fold} file={file} ts={ts} label={noteTitle(file)} count={nl.length} style={ui.pageLine} />
+            {!fold.isFolded(file) && (
+              <View style={ui.row}>
+                {nl
+                  .slice()
+                  .sort((a, b) => a.page - b.page)
+                  .map((h, k) => (
+                    <KwChip key={k} ts={ts} label={`#${h.keyword} p.${h.page}`} onPress={() => openFile(h.file, h.page)} />
+                  ))}
+              </View>
+            )}
           </View>
         ))}
     </View>

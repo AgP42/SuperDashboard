@@ -10,11 +10,23 @@ export const fileGlyph = (path: string) => (/\.pdf$/i.test(path) ? '📕' : /\.e
 /** A button that adopts the chosen design (border weight/colour), font and text
  *  size: used by the dashboard header and the in-card Refresh buttons so they
  *  match instead of being heavy black boxes on the lighter themes. */
+// The user's corner radius (config.corners), overriding the design's own rounding
+// on block frames and dashboard buttons. undefined = the design decides. Set from
+// the loaded config before each dashboard render (see App) and by the Settings
+// preview; module-level so every frame/button reads it without prop-drilling.
+let cornerOverride: number | undefined;
+export function setCornerRadius(r: number | undefined): void {
+  cornerOverride = r;
+}
+export function cornerRadius(): number | undefined {
+  return cornerOverride;
+}
+
 export function themedBtnStyle(theme: Theme, s: number, font?: string) {
   const line = theme === 'gridgray' ? '#888888' : '#000000';
   const border =
     theme === 'minimal' || theme === 'airy' ? 0 : theme === 'grid' || theme === 'gridgray' ? StyleSheet.hairlineWidth : 1.5;
-  const radius = theme === 'card' ? 12 : theme === 'ledger' || theme === 'underline' ? 0 : 8;
+  const radius = cornerOverride ?? (theme === 'card' ? 12 : theme === 'ledger' || theme === 'underline' ? 0 : 8);
   const hs = Math.min(s, 1.35); // stay compact even at XL text size
   return {line, radius, border, fontSize: 14 * hs, ff: font ? {fontFamily: font} : null};
 }

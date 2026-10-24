@@ -29,6 +29,7 @@ import {
   Theme,
   THEMES,
   MAX_BLOCK_PX,
+  MAX_CORNER,
   MIN_BLOCK_PX,
   Zone,
   ZoneCommon,
@@ -211,7 +212,7 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
       <View style={ui.snapWrap}>
         {([1, 2, 3] as const).map(n => (
           <Snap key={n} width={150} on={cols === n} label={`${n} column${n > 1 ? 's' : ''}`} onPress={() => setCols(n)}>
-            <MiniPage theme={cfg.theme} cols={n} zones={sampleZones} width={150} />
+            <MiniPage theme={cfg.theme} cols={n} zones={sampleZones} width={150} corners={cfg.corners} />
           </Snap>
         ))}
       </View>
@@ -224,11 +225,36 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
         onChange={v => update(c => void (c.layout.vmode = v as 'masonry' | 'fixed'))}
       />
 
+      <Text style={ui.wizStepTag}>Corners</Text>
+      <Text style={ui.subLabel}>Rounding of the block frames and dashboard buttons: the design's own, square, or your radius.</Text>
+      <Seg
+        options={[
+          {v: 'design', label: 'Design default'},
+          {v: 'square', label: 'Square'},
+          {v: 'custom', label: 'Custom'},
+        ]}
+        value={cfg.corners === undefined ? 'design' : cfg.corners === 0 ? 'square' : 'custom'}
+        onChange={v =>
+          update(c => {
+            if (v === 'design') delete c.corners;
+            else if (v === 'square') c.corners = 0;
+            else c.corners = c.corners && c.corners > 0 ? c.corners : 8;
+          })
+        }
+      />
+      {cfg.corners !== undefined && cfg.corners > 0 && (
+        <View style={[ui.row, {alignItems: 'center', marginTop: 4}]}>
+          <Mini label="−" onPress={() => update(c => void (c.corners = Math.max(1, (c.corners ?? 8) - 2)))} />
+          <Text style={[ui.itemText, {marginHorizontal: 10}]}>{cfg.corners} px</Text>
+          <Mini label="＋" onPress={() => update(c => void (c.corners = Math.min(MAX_CORNER, (c.corners ?? 8) + 2)))} />
+        </View>
+      )}
+
       <Text style={ui.wizStepTag}>Design: on your {cols}-column layout</Text>
       <View style={ui.snapWrap}>
         {THEMES.map(t => (
           <Snap key={t} width={150} on={cfg.theme === t} label={t === 'gridgray' ? 'grid (grey)' : t === 'grid' ? 'grid (black)' : t} onPress={() => update(c => void (c.theme = t))}>
-            <MiniPage theme={t} cols={cols} zones={sampleZones} width={150} />
+            <MiniPage theme={t} cols={cols} zones={sampleZones} width={150} corners={cfg.corners} />
           </Snap>
         ))}
       </View>
@@ -424,6 +450,7 @@ function StepSections({cfg, update, openModal}: {cfg: DashboardConfig; update: U
           zones={cfg.zones.map(z => ({type: z.type, title: z.title, col: colOf(z), span: z.span}))}
           width={270}
           grow
+          corners={cfg.corners}
         />
       </View>
 
@@ -587,6 +614,7 @@ function ZoneContentEditor({
             value={z.canDelete ? 'on' : 'off'}
             onChange={v => update(c => void ((c.zones[i] as any).canDelete = v === 'on'))}
           />
+          <NotesFoldedRow i={i} folded={!!z.notesFolded} update={update} />
         </View>
       )}
       {z.type === 'keywords' && <KeywordsEditor i={i} zone={z} update={update} openModal={openModal} />}
@@ -792,6 +820,24 @@ function NoteSortRow({i, value, update}: {i: number; value: NoteSort; update: UP
   );
 }
 
+/** Stars / Keywords: whether each notebook's group starts folded. Either way a
+ *  tap on a notebook's name folds/unfolds it, and that choice is remembered. */
+function NotesFoldedRow({i, folded, update}: {i: number; folded: boolean; update: UP}) {
+  return (
+    <View>
+      <Text style={ui.subLabel}>Notebooks (tap a notebook's name to fold / unfold it)</Text>
+      <Seg
+        options={[
+          {v: 'open', label: 'Expanded by default'},
+          {v: 'folded', label: 'Folded by default'},
+        ]}
+        value={folded ? 'folded' : 'open'}
+        onChange={v => update(c => void ((c.zones[i] as any).notesFolded = v === 'folded'))}
+      />
+    </View>
+  );
+}
+
 function KeywordsEditor({i, zone, update, openModal}: EditorProps<'keywords'>) {
   const specific = (zone.keywords?.length ?? 0) > 0;
   return (
@@ -807,6 +853,9 @@ function KeywordsEditor({i, zone, update, openModal}: EditorProps<'keywords'>) {
           value={zone.display ?? 'list'}
           onChange={v => update(c => void ((c.zones[i] as any).display = v as KeywordDisplay))}
         />
+        {(zone.sort === 'note' || zone.display === 'byfolder') && (
+          <NotesFoldedRow i={i} folded={!!zone.notesFolded} update={update} />
+        )}
       </View>
       <Text style={ui.subLabel}>Keywords: {specific ? 'selected' : 'all'}</Text>
       {(zone.keywords ?? []).map((kw, j) => (
@@ -866,7 +915,7 @@ function Snap({on, label, width, onPress, children}: {on: boolean; label: string
 }
 
 /** A schematic portrait mini-page: real page shape, labelled zone boxes. */
-function MiniPage({theme, cols, zones, width, grow}: {theme: Theme; cols: number; zones: MiniZ[]; width: number; grow?: boolean}) {
+function MiniPage({theme, cols, zones, width, grow, corners}: {theme: Theme; cols: number; zones: MiniZ[]; width: number; grow?: boolean; corners?: number}) {
   const height = Math.round((width * 4) / 3);
   const columns: MiniZ[][] = Array.from({length: cols}, () => []);
   // Full-width blocks (span) sit above / below the columns, as on the dashboard.
@@ -877,7 +926,7 @@ function MiniPage({theme, cols, zones, width, grow}: {theme: Theme; cols: number
     columns[c].push(z);
   });
   const band = (where: 'top' | 'bottom') =>
-    zones.filter(z => span(z) === where).map((z, zi) => <MiniZone key={where + zi} theme={theme} label={z.title || z.type} />);
+    zones.filter(z => span(z) === where).map((z, zi) => <MiniZone key={where + zi} theme={theme} label={z.title || z.type} corners={corners} />);
   return (
     // Page height is a MINIMUM: when the blocks don't fit, the page grows rather
     // than letting a long column run under the bottom full-width band. flexGrow
@@ -891,7 +940,7 @@ function MiniPage({theme, cols, zones, width, grow}: {theme: Theme; cols: number
         {columns.map((col, ci) => (
           <View key={ci} style={{flex: 1, marginRight: ci < cols - 1 ? 4 : 0}}>
             {col.map((z, zi) => (
-              <MiniZone key={zi} theme={theme} label={z.title || z.type} />
+              <MiniZone key={zi} theme={theme} label={z.title || z.type} corners={corners} />
             ))}
           </View>
         ))}
@@ -901,7 +950,10 @@ function MiniPage({theme, cols, zones, width, grow}: {theme: Theme; cols: number
   );
 }
 
-function MiniZone({theme, label}: {theme: Theme; label: string}) {
+// Thumbnails draw at ~0.6x the dashboard's corner radius (boxed 8→5, card 12→6).
+const miniRadius = (corners: number | undefined, fallback: number) => (corners === undefined ? fallback : Math.round(corners * 0.6));
+
+function MiniZone({theme, label, corners}: {theme: Theme; label: string; corners?: number}) {
   const lines = (
     <>
       <View style={ui.mzLine} />
@@ -910,7 +962,7 @@ function MiniZone({theme, label}: {theme: Theme; label: string}) {
   );
   if (theme === 'boxed') {
     return (
-      <View style={ui.mzBoxed}>
+      <View style={[ui.mzBoxed, {borderRadius: miniRadius(corners, 5)}]}>
         <View style={ui.mzCap}>
           <Text style={ui.mzCapText} numberOfLines={1}>{label}</Text>
         </View>
@@ -930,7 +982,7 @@ function MiniZone({theme, label}: {theme: Theme; label: string}) {
   if (theme === 'grid' || theme === 'gridgray') {
     const line = theme === 'gridgray' ? '#888888' : '#000000';
     return (
-      <View style={{borderWidth: StyleSheet.hairlineWidth, borderColor: line, borderRadius: 3, marginBottom: 6}}>
+      <View style={{borderWidth: StyleSheet.hairlineWidth, borderColor: line, borderRadius: miniRadius(corners, 3), marginBottom: 6}}>
         <View style={{borderBottomWidth: StyleSheet.hairlineWidth, borderColor: line, paddingHorizontal: 4, paddingVertical: 2}}>
           <Text style={{fontSize: 8, fontWeight: '700', color: line}} numberOfLines={1}>{label.toUpperCase()}</Text>
         </View>
@@ -948,7 +1000,7 @@ function MiniZone({theme, label}: {theme: Theme; label: string}) {
   }
   if (theme === 'card') {
     return (
-      <View style={{borderWidth: 1, borderColor: '#000', borderRadius: 6, backgroundColor: '#eeeeec', padding: 5, marginBottom: 6}}>
+      <View style={{borderWidth: 1, borderColor: '#000', borderRadius: miniRadius(corners, 6), backgroundColor: '#eeeeec', padding: 5, marginBottom: 6}}>
         <Text style={ui.mzLabelText} numberOfLines={1}>{label}</Text>
         {lines}
       </View>

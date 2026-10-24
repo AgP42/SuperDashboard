@@ -10,6 +10,16 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.2.0 — 2026-10-24
+
+### New
+- **Corners.** Keep your design's rounding, make every block **square**, or set your own radius
+  (Look → Corners). The design previews follow live.
+- **Fold notebooks in Stars and Keywords.** Tap a notebook's name to fold or unfold its stars or
+  keywords; it stays that way. Notebooks can also start folded, for a compact list of notebooks.
+
+---
+
 ## v2.1.29 — 2026-10-24
 
 ### New

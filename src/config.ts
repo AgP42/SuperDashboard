@@ -131,7 +131,7 @@ export type ClipText = 'hand' | 'ocr';
 export type Zone = ZoneCommon &
   (
     | {type: 'shortcuts'; title?: string; items: ShortcutItem[]; display?: ItemDisplay}
-    | {type: 'stars'; title?: string; folders: string[]; noteSort?: NoteSort; lineMode?: LineMode; canDelete?: boolean}
+    | {type: 'stars'; title?: string; folders: string[]; noteSort?: NoteSort; lineMode?: LineMode; canDelete?: boolean; notesFolded?: boolean}
     | {
         type: 'keywords';
         title?: string;
@@ -141,6 +141,8 @@ export type Zone = ZoneCommon &
         keywords?: string[];
         display?: KeywordDisplay;
         noteSort?: NoteSort;
+        /** Notebook groups start folded (tap a notebook to unfold it). */
+        notesFolded?: boolean;
       }
     | {type: 'apps'; title?: string; apps: AppItem[]; display?: ItemDisplay}
     | {type: 'recent'; title?: string; count?: number; display?: ItemDisplay}
@@ -185,6 +187,8 @@ export const BLOCK_HEIGHTS: Record<BlockHeight, number> = {S: 190, M: 300, L: 43
  *  would be invisible/untappable; the maximum is a few screens tall. */
 export const MIN_BLOCK_PX = 20;
 export const MAX_BLOCK_PX = 3000;
+/** Largest custom corner radius (px) for block frames / dashboard buttons. */
+export const MAX_CORNER = 30;
 
 /** A block slot's height in px: the custom `hpx` when set and sane, else the
  *  S/M/L preset. Single source for the dashboard (fixed blocks + spacers). */
@@ -209,6 +213,9 @@ export interface DashboardConfig {
   font?: string;
   /** Show each block's type icon on its dashboard title. */
   showIcons?: boolean;
+  /** Corner radius (px) of block frames and dashboard buttons, 0 = square.
+   *  undefined = the design's own rounding. */
+  corners?: number;
   /** Rectangle drawn on the note around a lassoed clip (off by default). */
   clipFrame?: ClipFrame;
   /** Capture clips as handwriting (image, default) or OCR them to text. */
@@ -358,8 +365,10 @@ function normalize(raw: any): DashboardConfig {
   const clipFontSize: number = rawSize <= 48 ? 96 : Math.min(220, rawSize);
   const clipFontPath: string | undefined = typeof raw?.clipFontPath === 'string' && raw.clipFontPath ? raw.clipFontPath : undefined;
   const clipBacklink: boolean = raw?.clipBacklink !== false; // default on
+  const corners: number | undefined =
+    typeof raw?.corners === 'number' && isFinite(raw.corners) ? Math.max(0, Math.min(MAX_CORNER, Math.round(raw.corners))) : undefined;
 
-  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, clipFrame, clipText, clipFontSize, clipFontPath, clipBacklink, zones};
+  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, corners, clipFrame, clipText, clipFontSize, clipFontPath, clipBacklink, zones};
 }
 
 function isZone(z: any): z is Zone {

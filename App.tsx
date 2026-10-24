@@ -10,7 +10,7 @@ import {getRoute, setRoute, Route} from './src/route';
 import {DashboardConfig, loadConfig, saveConfig, blockHeightPx} from './src/config';
 import {leavePlugin} from './src/bubble';
 import {tscale, ZoneView} from './src/zones';
-import {ThemedButton, ui} from './src/ui';
+import {setCornerRadius, ThemedButton, ui} from './src/ui';
 import {SettingsScreen} from './src/settings';
 import {autoRefreshTitles} from './src/notetoc';
 import {timed} from './src/perf';
@@ -123,6 +123,8 @@ function DashboardScreen(): React.JSX.Element {
         : undefined,
     [cfg],
   );
+  // The user's corner radius (Look → Corners) for every block frame / button below.
+  setCornerRadius(cfg?.corners);
   const columns = cfg?.layout.columns ?? 1;
   const vmode = cfg?.layout.vmode ?? 'masonry';
   // Collapse/expand a block (persisted in config so it sticks across opens).
