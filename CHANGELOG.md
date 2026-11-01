@@ -10,6 +10,18 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.2.1 — 2026-11-01
+
+### Changed
+- **The debug log has moved** to `MyStyle/Plugins/Dashboard/SuperDashboard_log.txt`, next to your
+  settings, instead of the root of `MyStyle`. You can delete the old `MyStyle/dashboard-log.txt`
+  and `dashboard-log.old.txt` yourself; the plugin is not allowed to delete files.
+
+### New
+- **Turn the debug log off:** Settings → Diagnostics → Debug log.
+
+---
+
 ## v2.2.0 — 2026-10-24
 
 ### New

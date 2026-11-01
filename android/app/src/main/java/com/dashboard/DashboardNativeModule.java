@@ -491,17 +491,32 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
         }
     }
 
-    private static final String LOG_PATH = "/storage/emulated/0/MyStyle/dashboard-log.txt";
-    private static final String LOG_OLD_PATH = "/storage/emulated/0/MyStyle/dashboard-log.old.txt";
+    private static final String LOG_PATH = "/storage/emulated/0/MyStyle/Plugins/Dashboard/SuperDashboard_log.txt";
+    private static final String LOG_OLD_PATH = "/storage/emulated/0/MyStyle/Plugins/Dashboard/SuperDashboard_log.old.txt";
     private static final long LOG_CAP = 262_144;
+    // Settings → Diagnostics → Debug log. Off = logcat only, no file. Static so
+    // it holds for the whole PluginHost process; JS sets it on every config load/save.
+    private static volatile boolean fileLog = true;
+
+    @ReactMethod
+    public void setFileLog(boolean on, Promise promise) {
+        fileLog = on;
+        promise.resolve(true);
+    }
 
     @ReactMethod
     public void appendLog(String text, Promise promise) {
         // Mirror to logcat first: it survives whatever happens to the file
         // (`adb logcat -s SuperDashboard`).
         android.util.Log.i("SuperDashboard", text);
+        if (!fileLog) {
+            promise.resolve(true);
+            return;
+        }
         try {
             File f = new File(LOG_PATH);
+            File parent = f.getParentFile();
+            if (parent != null && !parent.isDirectory()) parent.mkdirs();
             // Cap the debug log so it can't grow without bound. The firmware's
             // PluginSecurityManager forbids plugins to DELETE files (it throws
             // SecurityException), so any delete/rename-over in the rotation killed

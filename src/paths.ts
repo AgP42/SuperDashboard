@@ -3,7 +3,7 @@
  * PNGs). MyStyle/ is watched by the firmware's file observers and synced to
  * the Supernote cloud; keeping caches there uploaded every scan's output
  * (seen in logcat: XL-L-FromLocalTask pushing scancache.json to the cloud).
- * config.json / profiles.json / dashboard-log.txt intentionally STAY in
+ * config.json / profiles.json / SuperDashboard_log.txt intentionally STAY in
  * MyStyle: they're the user-visible contract (hand-editable, and reachable
  * over MTP on the adb-less A5X).
  */

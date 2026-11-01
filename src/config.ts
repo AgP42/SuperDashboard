@@ -226,6 +226,8 @@ export interface DashboardConfig {
   clipBacklink?: boolean;
   /** MyStyle/fonts .ttf/.otf path for an OCR'd clip pasted as a text box; '' / undefined = the note's default font. */
   clipFontPath?: string;
+  /** Write the debug log to MyStyle/Plugins/Dashboard/SuperDashboard_log.txt (on by default). */
+  debugLog?: boolean;
   zones: Zone[];
 }
 
@@ -281,20 +283,30 @@ export async function hasSavedConfig(): Promise<boolean> {
   );
 }
 
+/** Tell the native logger whether to write the log file (logcat always gets it). */
+function applyLogSetting(cfg: DashboardConfig): void {
+  try {
+    DashboardNative?.setFileLog?.(cfg.debugLog !== false).catch(() => {});
+  } catch {}
+}
+
 export async function loadConfig(): Promise<DashboardConfig> {
   const text = (await readJson(CONFIG_PATH)) ?? (await readJson(LEGACY_CONFIG_PATH));
-  if (!text) return DEFAULT_CONFIG;
-  try {
-    return normalize(JSON.parse(text));
-  } catch {
-    return DEFAULT_CONFIG;
+  let cfg = DEFAULT_CONFIG;
+  if (text) {
+    try {
+      cfg = normalize(JSON.parse(text));
+    } catch {}
   }
+  applyLogSetting(cfg);
+  return cfg;
 }
 
 /** Persist config to disk. Returns true on success. */
 export async function saveConfig(cfg: DashboardConfig): Promise<boolean> {
   try {
     await DashboardNative.writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+    applyLogSetting(cfg);
     return true;
   } catch {
     return false;
@@ -365,10 +377,11 @@ function normalize(raw: any): DashboardConfig {
   const clipFontSize: number = rawSize <= 48 ? 96 : Math.min(220, rawSize);
   const clipFontPath: string | undefined = typeof raw?.clipFontPath === 'string' && raw.clipFontPath ? raw.clipFontPath : undefined;
   const clipBacklink: boolean = raw?.clipBacklink !== false; // default on
+  const debugLog: boolean = raw?.debugLog !== false; // default on
   const corners: number | undefined =
     typeof raw?.corners === 'number' && isFinite(raw.corners) ? Math.max(0, Math.min(MAX_CORNER, Math.round(raw.corners))) : undefined;
 
-  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, corners, clipFrame, clipText, clipFontSize, clipFontPath, clipBacklink, zones};
+  return {bubble: {mode}, scan, theme, layout, textScale, headingScale, font, showIcons, corners, clipFrame, clipText, clipFontSize, clipFontPath, clipBacklink, debugLog, zones};
 }
 
 function isZone(z: any): z is Zone {

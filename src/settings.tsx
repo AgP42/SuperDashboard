@@ -416,6 +416,15 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
         }
       />
       </Group>
+      <Group title="Diagnostics">
+      <Text style={ui.wizStepTag}>Debug log</Text>
+      <Text style={ui.subLabel}>Keep a technical log in MyStyle/Plugins/Dashboard/SuperDashboard_log.txt, to attach to a bug report.</Text>
+      <Seg
+        options={[{v: 'on', label: 'On'}, {v: 'off', label: 'Off'}]}
+        value={cfg.debugLog === false ? 'off' : 'on'}
+        onChange={v => update(c => void (c.debugLog = v === 'on'))}
+      />
+      </Group>
     </View>
   );
 }

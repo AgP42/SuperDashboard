@@ -26,7 +26,7 @@ const {DashboardNative} = NativeModules;
 export const PERM_FILE_READ = 'plugin.permission.FILE:READ';
 export const PERM_FILE_WRITE = 'plugin.permission.FILE:WRITE';
 
-/** Mirror index.js's on-device log so a denied grant is visible in dashboard-log.txt. */
+/** Mirror index.js's on-device log so a denied grant is visible in SuperDashboard_log.txt. */
 function plog(msg: string): void {
   try {
     DashboardNative?.appendLog?.(`[perm] ${msg}`).catch(() => {});

@@ -428,19 +428,24 @@ and are cleaned up automatically.
 SuperDashboard keeps a technical log on the device. Sending it with your report is the fastest way to get
 a problem fixed.
 
-**Where it is:** in the **`MyStyle`** folder of your Supernote:
+**Where it is:** in the **`MyStyle/Plugins/Dashboard`** folder of your Supernote:
 
-- `MyStyle/dashboard-log.txt`: the current log;
-- `MyStyle/dashboard-log.old.txt`: the previous one (only exists once the log has filled up).
+- `SuperDashboard_log.txt`: the current log;
+- `SuperDashboard_log.old.txt`: the previous one (only exists once the log has filled up).
+
+The log is on by default. To stop it, go to **Settings → Diagnostics → Debug log → Off**.
+
+Up to v2.2.0 the log was written to `MyStyle/dashboard-log.txt` (and `dashboard-log.old.txt`). The
+plugin is not allowed to delete files, so if you still have these, delete them yourself.
 
 **How to get it:**
 
 1. **Reproduce the problem first**, then fetch the log right after, so the relevant lines are at the end.
-2. Copy `dashboard-log.txt` to your computer, whichever way is easiest:
-   - **USB cable**: plug the Supernote into your computer, open its storage, go to `MyStyle` and copy
+2. Copy `SuperDashboard_log.txt` to your computer, whichever way is easiest:
+   - **USB cable**: plug the Supernote into your computer, open its storage, go to `MyStyle/Plugins/Dashboard` and copy
      the file. On a Mac you need an MTP tool such as OpenMTP or Android File Transfer.
    - **Browse & Access** (Wi-Fi transfer built into the Supernote): turn it on, open the address it
-     shows in a browser on your computer, go to `MyStyle` and download the file.
+     shows in a browser on your computer, go to `MyStyle/Plugins/Dashboard` and download the file.
 3. **Attach it** to a [GitHub issue](https://github.com/AgP42/SuperDashboard/issues), together with your
    **device model** (Manta, Nomad, A5 X, A6 X…), your **firmware version** (Settings → About) and the
    **SuperDashboard version** (Settings → Apps → Plugins).
