@@ -38,21 +38,12 @@ Blocks arrange in 1 / 2 / 3 columns (masonry or fixed height), collapse to their
 **ⓘ** help button in Settings. The **[User Guide](USER_GUIDE.md)** explains how every module works and
 how to configure it.
 
-## Which version do I need?
+## Install
 
-Supernote's firmware is called **Chauvet**; what matters is the version number. A build made for one
-firmware does not run on the other, so pick the release that matches your device (check it in device
-settings):
-
-| Your Chauvet version | Download |
-|---|---|
-| Older than 3.29.43 (Manta / Nomad) / 2.26.40 (A5 X / A6 X) | **v0.22.0** |
-| 3.29.43 (Manta / Nomad) / 2.26.40 (A5 X / A6 X) or later | **[latest release](../../releases/latest)** |
-
-**Install**: copy the `.snplg` into your device's **`MyStyle`** folder, then on the device
-**Settings -> Apps -> Plugins -> Choose Installation Package**. SuperDashboard declares **no INTERNET
-permission**; on first run it asks once for **file access** (READ/WRITE) to scan and open your files and
-save its settings. Full install and permission details are in the [User Guide](USER_GUIDE.md).
+Download the `.snplg` from the **[latest release](../../releases/latest)**, copy it into your device's
+**`MyStyle`** folder, then on the device **Settings -> Apps -> Plugins -> Choose Installation Package**.
+SuperDashboard declares **no INTERNET permission**; on first run it asks once for **file access**
+(READ/WRITE) to scan and open your files and save its settings. Full install and permission details are in the [User Guide](USER_GUIDE.md).
 
 ## Build from source
 

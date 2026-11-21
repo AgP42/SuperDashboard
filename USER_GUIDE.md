@@ -28,14 +28,6 @@ is a paid app with a free trial, sold and supported by its author: see
 
 ![The Relay tasks block, grouped by list](docs/img/mod-relay-open.png)
 
-### Which version do I need?
-
-Supernote's firmware is called **Chauvet** (the platform name, like "Android"), so what matters is the
-**version number**. This build is for **Chauvet 3.29.43** (Manta / Nomad) / **2.26.40** (A5 X / A6 X)
-**or later**, which added the plugin permission system. On **older** Chauvet, use **v0.22.0** instead: a
-build made for one firmware won't run on the other ("package not compatible", or it does nothing). Check
-your version in the device settings.
-
 ### Install
 
 1. Copy `SuperDashboard-v<version>.snplg` (from the GitHub Releases, or `dist/`) into the **`MyStyle`**
