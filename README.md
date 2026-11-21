@@ -29,7 +29,9 @@ and font you like. It runs **fully on-device and offline**: no account, no netwo
   hand, a PDF / EPUB task is dashboard-only.
 - **Relay tasks** (beta): your Supernote to-dos, exported by the [Relay](https://relay.kioku.uk/) Mac app,
   grouped by due date or list (each group folds); tap one made from a note to open that note on its
-  page. Made with Relay's author; the plugin only reads the file Relay syncs, so it stays offline.
+  page. Made together with Relay's author, [u/stuffimadeuk](https://www.reddit.com/user/stuffimadeuk/);
+  get Relay at **[relay.kioku.uk](https://relay.kioku.uk/)**. The plugin only reads the file Relay syncs,
+  so it stays offline.
 - **Empty**: a spacer to line columns up (preset or exact px height).
 
 Blocks arrange in 1 / 2 / 3 columns (masonry or fixed height), collapse to their title, and each has an
