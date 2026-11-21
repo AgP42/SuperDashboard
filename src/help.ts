@@ -32,7 +32,7 @@ export const HELP: Record<string, HelpEntry> = {
   relay: {
     title: 'Relay tasks (beta)',
     what: 'Your Supernote to-dos, as exported by the Relay app (macOS, by u/stuffimadeuk); tap a task made from a note to open that note on its page.',
-    how: 'Group open tasks by: Due date (Overdue, Today, Tomorrow, Next 7 days, Later, No date) or List. Task notes: Hide / Show. Open / Done tabs; ↻ re-reads the file.',
+    how: 'Group open tasks by: Due date (Overdue, Today, Tomorrow, Next 7 days, Later, No date) or List. Task notes: Hide / Show. Open / Done tabs; tap a group’s header to fold / unfold it (remembered); ↻ re-reads the file.',
     good: 'Read-only and offline: the plugin only reads MyStyle/Plugins/Relay/relay-tasks.json, which Relay delivers through Supernote Cloud sync (tick MyStyle in the sync folders). The header line says how old the export is; if the file is briefly missing during a sync, the last good copy is shown.',
   },
   toc: {

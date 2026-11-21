@@ -1,6 +1,7 @@
 /**
  * Per-notebook fold state inside the Stars and Keywords blocks (tap a notebook's
- * name to fold/unfold its stars or keywords). Persisted in the plugin-private
+ * name to fold/unfold its stars or keywords), and per-group fold state in the
+ * Relay block (keys "list:<id>" / "due:<bucket>"). Persisted in the plugin-private
  * dir so a long list stays folded across dashboard opens, without growing
  * config.json with note paths.
  *
@@ -17,17 +18,17 @@ const {DashboardNative} = NativeModules;
 const FILE = 'notefold.json';
 const MAX_PER_KIND = 500; // bound the file; oldest flips drop first
 
-type Kind = 'stars' | 'keywords';
+type Kind = 'stars' | 'keywords' | 'relay';
 let mem: Record<Kind, string[]> | null = null;
 
 async function load(): Promise<Record<Kind, string[]>> {
   if (mem) return mem;
-  mem = {stars: [], keywords: []};
+  mem = {stars: [], keywords: [], relay: []};
   try {
     const dir = await cacheDir();
     const text: string = await DashboardNative.readTextFile(dir + FILE);
     const obj = text && text.trim() ? JSON.parse(text) : null;
-    for (const k of ['stars', 'keywords'] as Kind[]) {
+    for (const k of ['stars', 'keywords', 'relay'] as Kind[]) {
       if (Array.isArray(obj?.[k])) mem[k] = obj[k].filter((p: any) => typeof p === 'string');
     }
   } catch {

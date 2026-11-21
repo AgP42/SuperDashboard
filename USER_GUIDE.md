@@ -6,12 +6,27 @@ SuperDashboard adds a floating **house bubble** (and a toolbar button) to your S
 a **dashboard you compose yourself** from **modules**: shortcuts, a file browser, search (names,
 keywords and note headings), a Contents outline of the note you're in, recent files, stars, keywords, a
 clock, device status, app launchers, and Note Clips and To-dos (captured from notes, and from PDFs /
-EPUBs), plus your Supernote to-dos when you use the Relay app. Lay them out in 1, 2 or 3 columns, in the design and font you like. It runs **fully on-device and
-offline**: no account, no network.
+EPUBs), plus your Supernote to-dos when you use the Relay app. Lay them out in 1, 2 or 3 columns, in
+the design and font you like. It runs **fully on-device and offline**: no account, no network.
 
 | A note page: a star, a clip, a to-do | The dashboard it builds |
 |---|---|
 | ![A source note page](docs/img/note-source.png) | ![The dashboard](docs/img/dashboard-hero2.png) |
+
+### Works with Relay (beta)
+
+**[Relay](https://relay.kioku.uk/)** is a separate Mac app, made by u/stuffimadeuk, that syncs your
+**Supernote to-dos** (the system To-do app) with Apple Reminders, Todoist, Things, Google Tasks,
+TickTick or Asana, through Supernote Cloud. Plugins can't read the Supernote's to-dos, so the two
+projects worked together: Relay can export your tasks to a small file on the Supernote, and
+SuperDashboard's **Relay tasks** block shows them on your dashboard, grouped by due date or list, with
+a tap to open the note a task came from.
+
+SuperDashboard stays **offline**: it only reads that file and never talks to Relay or the cloud. Relay
+is a paid app with a free trial, sold and supported by its author: see
+**[relay.kioku.uk](https://relay.kioku.uk/)**. Setting up the block: [4.13 Relay tasks](#413--relay-tasks-beta).
+
+![The Relay tasks block, grouped by list](docs/img/mod-relay-open.png)
 
 ### Which version do I need?
 
@@ -355,11 +370,21 @@ Later, No date) or **List** (in your Supernote list order). **Task notes** — *
 task's notes under its title.
 **Using it:** **Open** / **Done** tabs (Done shows the 50 most recently finished). Important tasks show
 a ❗, a reminder a 🔔, and overdue ones a ⚠. Tap a task made from a note (📝) to open that note on its
-page. **↻** re-reads the file.
+page. Tap a group's header (a list, or Today, Overdue…) to **fold / unfold** it; folds are remembered.
+**↻** re-reads the file.
 **Good to know:** it is **read-only** and fully **offline**: SuperDashboard only reads that file; it
 never contacts Relay or the cloud, and ticking tasks off is done in the To-do app or in Relay. The top
 line says how old the export is ("Updated by Relay 2 h ago"). While a sync replaces the file it can be
 briefly missing: the block then keeps showing the last good copy and says so.
+
+| Lists folded (tap a header) | Done (struck through) |
+|---|---|
+| ![Relay tasks, lists folded](docs/img/mod-relay-folded.png) | ![Relay tasks, Done tab](docs/img/mod-relay-done.png) |
+
+The plugin's **About** page (Settings → Apps → Plugins → SuperDashboard) also mentions the
+collaboration:
+
+![About This Plugin, with the Relay paragraph](docs/img/relay-about.png)
 
 ### 4.14 ▭ Empty
 

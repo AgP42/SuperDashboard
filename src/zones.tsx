@@ -1161,6 +1161,7 @@ function RelayZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'relay'
   const [st, setSt] = useState<RelayState | null>(null);
   const [view, setView] = useState<'open' | 'done'>('open');
   const [busy, setBusy] = useState(false);
+  const fold = useNoteFold('relay', false); // groups start expanded; folds are remembered
   const load = async () => {
     setBusy(true);
     try {
@@ -1236,11 +1237,20 @@ function RelayZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'relay'
       </TouchableOpacity>
     );
   };
-  const groupHead = (label: string, n: number) => (
-    <Text key={'h:' + label} style={[{fontSize: 11 * s, fontWeight: '700', color: '#000000', marginTop: 6}, ff]}>
-      {label.toUpperCase()} ({n})
-    </Text>
-  );
+  // A group (list or due bucket): tap its header to fold / unfold it.
+  const group = (key: string, label: string, items: RelayTask[], showList: boolean) => {
+    if (!items.length) return [];
+    const folded = fold.isFolded(key);
+    return [
+      <TouchableOpacity key={'h:' + key} onPress={() => fold.toggle(key)} activeOpacity={0.6} style={{flexDirection: 'row', alignItems: 'center', marginTop: 6, paddingVertical: 2}}>
+        <Text style={[{flex: 1, fontSize: 11 * s, fontWeight: '700', color: '#000000'}, ff]} numberOfLines={1}>
+          {label.toUpperCase()} ({items.length})
+        </Text>
+        <Text style={{fontSize: 13 * s, color: '#000000', marginLeft: 6}}>{folded ? '▸' : '▾'}</Text>
+      </TouchableOpacity>,
+      ...(folded ? [] : items.map(t => row(t, showList))),
+    ];
+  };
 
   const openBody = () => {
     if (zone.groupBy === 'list') {
@@ -1252,15 +1262,10 @@ function RelayZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'relay'
         name: open.find(t => t.listId === id)?.list || id,
         order: 1e9,
       }));
-      return [...lists, ...extra].flatMap(l => {
-        const inList = open.filter(t => t.listId === l.id); // Relay already sorts by due, then title
-        return inList.length ? [groupHead(l.name, inList.length), ...inList.map(t => row(t, false))] : [];
-      });
+      // Relay already sorts tasks by due, then title.
+      return [...lists, ...extra].flatMap(l => group('list:' + l.id, l.name, open.filter(t => t.listId === l.id), false));
     }
-    return BUCKET_ORDER.flatMap(bk => {
-      const inBucket = open.filter(t => dueBucket(t.due, now) === bk);
-      return inBucket.length ? [groupHead(BUCKET_LABELS[bk], inBucket.length), ...inBucket.map(t => row(t, true))] : [];
-    });
+    return BUCKET_ORDER.flatMap(bk => group('due:' + bk, BUCKET_LABELS[bk], open.filter(t => dueBucket(t.due, now) === bk), true));
   };
 
   const age = feed ? ageLabel(feed.generatedAt) : '';

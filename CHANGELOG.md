@@ -10,11 +10,19 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.3.1 — 2026-11-21
+
+### New
+- **Relay tasks: fold a group.** Tap a list's header (or Overdue, Today…) to fold or unfold it; the
+  block remembers what you folded.
+
+---
+
 ## v2.3.0 — 2026-11-21
 
 ### New
-- **Relay tasks block (beta), made with the author of Relay.** If you use the [Relay](https://relay.kioku.uk/) app on your Mac,
-  this block shows your Supernote to-dos on the dashboard, grouped by due date or by list, with
+- **Relay tasks block (beta), made with the author of Relay.** If you use the
+  [Relay](https://relay.kioku.uk/) app on your Mac, this block shows your Supernote to-dos on the dashboard, grouped by due date or by list, with
   Open / Done tabs. Tap a task made from a note to open that note on its page. Read-only and
   offline: the plugin only reads the file Relay syncs to `MyStyle/Plugins/Relay/relay-tasks.json`.
 
