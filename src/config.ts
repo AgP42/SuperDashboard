@@ -92,6 +92,7 @@ export const ZONE_ICONS: Record<string, string> = {
   clips: '✂️',
   todo: '☑',
   toc: '≣',
+  relay: '⇄',
   spacer: '▢',
 };
 
@@ -111,6 +112,7 @@ export const ZONE_LABELS: Record<string, string> = {
   clips: 'Clips',
   todo: 'To-do',
   toc: 'Contents',
+  relay: 'Relay tasks',
   spacer: 'Empty',
 };
 
@@ -153,6 +155,7 @@ export type Zone = ZoneCommon &
     | {type: 'clips'; title?: string; folders?: string[]; labels?: string[]; display?: 'grid' | 'list'; sort?: ClipSort; size?: 'S' | 'M' | 'L'; textMode?: ClipTextMode}
     | {type: 'todo'; title?: string; folders?: string[]; labels?: string[]; display?: 'grid' | 'list'; sort?: ClipSort; size?: 'S' | 'M' | 'L'; textMode?: ClipTextMode}
     | {type: 'toc'; title?: string; indentByStyle?: boolean; titleLevels?: number[]}
+    | {type: 'relay'; title?: string; groupBy?: 'due' | 'list'; showDetail?: boolean}
     | {type: 'spacer'; title?: string}
   );
 
@@ -385,7 +388,7 @@ function normalize(raw: any): DashboardConfig {
 }
 
 function isZone(z: any): z is Zone {
-  return z && ['shortcuts', 'stars', 'keywords', 'apps', 'recent', 'clock', 'search', 'status', 'nav', 'clips', 'todo', 'toc', 'spacer'].includes(z.type);
+  return z && ['shortcuts', 'stars', 'keywords', 'apps', 'recent', 'clock', 'search', 'status', 'nav', 'clips', 'todo', 'toc', 'relay', 'spacer'].includes(z.type);
 }
 
 /** Guarantee a zone's required arrays/fields exist so a hand-edited config
@@ -445,6 +448,8 @@ function normalizeZone(z: any): Zone {
           : [1, 2, 3, 4];
       return {...z, indentByStyle: !!z.indentByStyle, titleLevels: tl};
     }
+    case 'relay':
+      return {...z, groupBy: z.groupBy === 'list' ? 'list' : 'due', showDetail: !!z.showDetail};
     case 'spacer':
       return {...z}; // empty block; height comes from `h` (set in normalize)
     default:

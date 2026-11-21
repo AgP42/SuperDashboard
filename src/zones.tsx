@@ -11,6 +11,7 @@ import {openFile, openFileAtPage, openFolder, launchApp} from './open';
 import {deleteStarByIndex, LineImg, unwrap} from './starText';
 import {NativeUIUtils, PluginCommAPI} from 'sn-plugin-lib';
 import {readNoteToc, cachedToc, TocEntry} from './notetoc';
+import {loadRelay, RelayState, RelayTask, dueBucket, dueLabel, ageLabel, BUCKET_LABELS, DueBucket} from './relay';
 import {scanStars, scanKeywords, flushCurrentNote, noteTitle, parentFolder, recentModifiedFiles, KeywordHit} from './scanner';
 import {readRecent} from './recent';
 import {loadIndex, loadKeywords, loadTitles, loadStarredFiles, loadStats, buildIndex, runSearch, warmSearch, IndexData, IndexEntry, KwEntry, TitleHit} from './searchIndex';
@@ -112,6 +113,8 @@ export function ZoneView({
         return <TodoZone zone={zone} theme={theme} ts={ts} nonce={nonce} columns={columns} />;
       case 'toc':
         return <TocZone zone={zone} theme={theme} ts={ts} nonce={nonce} />;
+      case 'relay':
+        return <RelayZone zone={zone} theme={theme} ts={ts} nonce={nonce} />;
       case 'spacer':
         return <View style={{height: blockHeightPx(zone)}} />;
     }
@@ -1142,6 +1145,159 @@ function TocZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'toc'}>; 
             <SearchRow icon="·" label={t.text} sub={`p.${t.page}`} onPress={() => data?.path && openFile(data.path, t.page)} s={s} font={ts.font} />
           </View>
         ))}
+    </ZoneFrame>
+  );
+}
+
+// ---- Relay tasks (read-only feed written by the Relay macOS app) -----------
+const BUCKET_ORDER: DueBucket[] = ['overdue', 'today', 'tomorrow', 'week', 'later', 'none'];
+const RELAY_DONE_MAX = 50; // the Done tab shows the most recently finished ones
+
+/** The user's Supernote to-dos as exported by Relay to MyStyle/Plugins/Relay/
+ *  relay-tasks.json (see relay.ts). Read-only: tap a task to open its source
+ *  note on the right page. Open tab grouped by due date or by list; Done tab
+ *  shows the latest finished ones. */
+function RelayZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'relay'}>; theme: Theme; ts: TScale; nonce?: number}) {
+  const [st, setSt] = useState<RelayState | null>(null);
+  const [view, setView] = useState<'open' | 'done'>('open');
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    setBusy(true);
+    try {
+      // Logs status + count only, never task text (debug-log privacy rule).
+      setSt(await timed('relay:load', loadRelay, x => `${x.status} ${x.feed?.tasks.length ?? 0}`));
+    } catch {
+      /* keep what's shown */
+    } finally {
+      setBusy(false);
+    }
+  };
+  useEffect(() => {
+    load();
+  }, [nonce]);
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('dashboard_refresh_all', () => load());
+    return () => sub.remove();
+  }, []);
+
+  const s = ts.s;
+  const ff = ts.font ? {fontFamily: ts.font} : null;
+  const feed = st?.feed ?? null;
+  const tasks = feed?.tasks ?? [];
+  const open = tasks.filter(t => !t.done);
+  const done = tasks
+    .filter(t => t.done)
+    .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
+    .slice(0, RELAY_DONE_MAX);
+  const now = new Date();
+
+  const openNote = async (t: RelayTask) => {
+    if (!t.note) return;
+    let exists = true;
+    try {
+      exists = (await DashboardNative?.fileExists?.(t.note.path)) !== false;
+    } catch {
+      /* can't tell: try to open anyway */
+    }
+    if (!exists) {
+      ToastAndroid.show(`“${t.note.name}” was moved or deleted since Relay's last export.`, ToastAndroid.LONG);
+      return;
+    }
+    openFile(t.note.path, t.note.page); // the spec's page is 1-based, like openFile's
+  };
+
+  const row = (t: RelayTask, showList: boolean) => {
+    const b = dueBucket(t.due, now);
+    const bits: string[] = [];
+    if (t.due && !t.done) bits.push((b === 'overdue' ? '⚠ ' : '') + dueLabel(t.due, now));
+    if (t.reminder && !t.done) bits.push('🔔');
+    if (showList && t.list) bits.push(t.list);
+    if (t.note) bits.push(`📝 ${t.note.name} p.${t.note.page}`);
+    return (
+      <TouchableOpacity key={t.id} onPress={() => openNote(t)} disabled={!t.note} activeOpacity={0.6} style={{flexDirection: 'row', paddingVertical: 5}}>
+        <Text style={{width: 22, fontSize: 15 * s, color: '#000000'}}>{t.done ? '☑' : '☐'}</Text>
+        <View style={{flex: 1}}>
+          <Text
+            style={[
+              {fontSize: 14 * s, color: t.done ? '#777777' : '#000000', fontWeight: t.important || b === 'overdue' ? '700' : '400'},
+              t.done ? {textDecorationLine: 'line-through'} : null,
+              ff,
+            ]}>
+            {t.important ? '❗ ' : ''}
+            {t.title}
+          </Text>
+          {zone.showDetail && !!t.detail && <Text style={[{fontSize: 12 * s, color: '#555555'}, ff]}>{t.detail}</Text>}
+          {bits.length > 0 && (
+            <Text style={[{fontSize: 11 * s, color: '#666666'}, ff]} numberOfLines={1}>
+              {bits.join('  ·  ')}
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+  const groupHead = (label: string, n: number) => (
+    <Text key={'h:' + label} style={[{fontSize: 11 * s, fontWeight: '700', color: '#000000', marginTop: 6}, ff]}>
+      {label.toUpperCase()} ({n})
+    </Text>
+  );
+
+  const openBody = () => {
+    if (zone.groupBy === 'list') {
+      const lists = [...(feed?.lists ?? [])].sort((a, b) => a.order - b.order);
+      const known = new Set(lists.map(l => l.id));
+      // A task whose list isn't in lists[] still shows, under its own list name.
+      const extra = [...new Set(open.filter(t => !known.has(t.listId)).map(t => t.listId))].map(id => ({
+        id,
+        name: open.find(t => t.listId === id)?.list || id,
+        order: 1e9,
+      }));
+      return [...lists, ...extra].flatMap(l => {
+        const inList = open.filter(t => t.listId === l.id); // Relay already sorts by due, then title
+        return inList.length ? [groupHead(l.name, inList.length), ...inList.map(t => row(t, false))] : [];
+      });
+    }
+    return BUCKET_ORDER.flatMap(bk => {
+      const inBucket = open.filter(t => dueBucket(t.due, now) === bk);
+      return inBucket.length ? [groupHead(BUCKET_LABELS[bk], inBucket.length), ...inBucket.map(t => row(t, true))] : [];
+    });
+  };
+
+  const age = feed ? ageLabel(feed.generatedAt) : '';
+  return (
+    <ZoneFrame
+      theme={theme}
+      hs={ts.hs}
+      font={ts.font}
+      title={zoneTitle(zone.title, 'Relay tasks')}
+      meta={open.length ? `${open.length} to do` : undefined}
+      onRefresh={load}
+      refreshing={busy}>
+      {st === null && <Text style={ui.empty}>reading Relay tasks…</Text>}
+      {st?.status === 'missing' && (
+        <Text style={ui.empty}>
+          No Relay file yet. This block shows the to-dos exported by the Relay app (macOS) to MyStyle/Plugins/Relay/relay-tasks.json. Turn on that
+          export in Relay, tick MyStyle in the Supernote's sync folders, then sync and tap ↻.
+        </Text>
+      )}
+      {st?.status === 'unreadable' && <Text style={ui.empty}>The Relay file can't be read (incomplete sync?). Sync again, then tap ↻.</Text>}
+      {st?.status === 'too-new' && <Text style={ui.empty}>This Relay file uses a newer format (v{st.version}): please update SuperDashboard.</Text>}
+      {feed && (
+        <>
+          <Text style={[{fontSize: 11 * s, color: '#666666', marginBottom: 4}, ff]}>
+            {st?.status === 'stale-copy' ? `Relay file unavailable right now: showing the copy from ${age}.` : `Updated by Relay ${age}.`}
+          </Text>
+          <View style={{flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 2}}>
+            {([['open', `Open${open.length ? ` (${open.length})` : ''}`], ['done', 'Done']] as const).map(([v, label]) => (
+              <TouchableOpacity key={v} onPress={() => setView(v)}>
+                <Text style={[view === v ? ui.clipTabOn : ui.clipTab, ff]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {view === 'open' && (open.length ? openBody() : <Text style={ui.empty}>Nothing left to do. 🎉</Text>)}
+          {view === 'done' && (done.length ? done.map(t => row(t, true)) : <Text style={ui.empty}>No finished tasks.</Text>)}
+        </>
+      )}
     </ZoneFrame>
   );
 }

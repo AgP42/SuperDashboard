@@ -29,6 +29,12 @@ export const HELP: Record<string, HelpEntry> = {
     how: '"Also search note titles": On to include headings, then tap "↻ Update heading index" once. Scope: add folders to limit the search, or leave empty for the whole device. "Also search the SD card" (off by default) adds the card.',
     good: 'Grammar under the box: "phrase", =exact, a|b, !exclude, f:folder, kw:, title:, star:, type:note|pdf|doc|folder, approx:. "↻ Update heading index" only re-reads what changed (seconds); "⟲ Re-index all" re-reads everything (slow; use it if a heading looks wrong).',
   },
+  relay: {
+    title: 'Relay tasks (beta)',
+    what: 'Your Supernote to-dos, as exported by the Relay app (macOS, by u/stuffimadeuk); tap a task made from a note to open that note on its page.',
+    how: 'Group open tasks by: Due date (Overdue, Today, Tomorrow, Next 7 days, Later, No date) or List. Task notes: Hide / Show. Open / Done tabs; ↻ re-reads the file.',
+    good: 'Read-only and offline: the plugin only reads MyStyle/Plugins/Relay/relay-tasks.json, which Relay delivers through Supernote Cloud sync (tick MyStyle in the sync folders). The header line says how old the export is; if the file is briefly missing during a sync, the last good copy is shown.',
+  },
   toc: {
     title: 'Contents',
     what: 'An outline of the headings in the note open behind the dashboard; tap one to jump to its page.',

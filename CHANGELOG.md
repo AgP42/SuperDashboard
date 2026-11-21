@@ -10,6 +10,16 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.3.0 — 2026-11-21
+
+### New
+- **Relay tasks block (beta), made with the author of Relay.** If you use the [Relay](https://relay.kioku.uk/) app on your Mac,
+  this block shows your Supernote to-dos on the dashboard, grouped by due date or by list, with
+  Open / Done tabs. Tap a task made from a note to open that note on its page. Read-only and
+  offline: the plugin only reads the file Relay syncs to `MyStyle/Plugins/Relay/relay-tasks.json`.
+
+---
+
 ## v2.2.1 — 2026-11-01
 
 ### Changed

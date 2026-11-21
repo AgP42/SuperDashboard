@@ -429,7 +429,7 @@ function StepLook({cfg, update}: {cfg: DashboardConfig; update: UP}) {
   );
 }
 
-const ADDABLE: Zone['type'][] = ['shortcuts', 'stars', 'keywords', 'apps', 'recent', 'clock', 'search', 'status', 'nav', 'clips', 'todo', 'toc'];
+const ADDABLE: Zone['type'][] = ['shortcuts', 'stars', 'keywords', 'apps', 'recent', 'clock', 'search', 'status', 'nav', 'clips', 'todo', 'toc', 'relay'];
 
 /** Icon + name for a placed block in the canvas. */
 function blockLabel(z: Zone): string {
@@ -644,6 +644,7 @@ function ZoneContentEditor({
         </View>
       )}
       {z.type === 'toc' && <TocEditor i={i} zone={z} update={update} />}
+      {z.type === 'relay' && <RelayEditor i={i} zone={z} update={update} />}
       {showHeight && <HeightRow i={i} zone={z} update={update} vmode={vmode} />}
       {columns > 1 && (
         <View>
@@ -1439,6 +1440,28 @@ function TocEditor({i, zone, update}: {i: number; zone: Extract<Zone, {type: 'to
     </View>
   );
 }
+function RelayEditor({i, zone, update}: {i: number; zone: Extract<Zone, {type: 'relay'}>; update: UP}) {
+  return (
+    <View>
+      <Text style={ui.subLabel}>
+        Shows your Supernote to-dos as exported by the Relay app (macOS) to MyStyle/Plugins/Relay/relay-tasks.json. Read-only; nothing leaves the
+        device. Needs MyStyle ticked in the Supernote's sync folders.
+      </Text>
+      <Text style={ui.subLabel}>Group open tasks by</Text>
+      <Seg
+        options={[{v: 'due', label: 'Due date'}, {v: 'list', label: 'List'}]}
+        value={zone.groupBy ?? 'due'}
+        onChange={v => update(c => void ((c.zones[i] as any).groupBy = v))}
+      />
+      <Text style={ui.subLabel}>Task notes (details)</Text>
+      <Seg
+        options={[{v: 'off', label: 'Hide'}, {v: 'on', label: 'Show'}]}
+        value={zone.showDetail ? 'on' : 'off'}
+        onChange={v => update(c => void ((c.zones[i] as any).showDetail = v === 'on'))}
+      />
+    </View>
+  );
+}
 function RecentEditor({i, zone, update}: {i: number; zone: Extract<Zone, {type: 'recent'}>; update: UP}) {
   return (
     <View>
@@ -1470,6 +1493,7 @@ function newZone(type: Zone['type']): Zone {
   if (type === 'clips') return {type, title: 'Clips', folders: [], labels: [], display: 'grid'};
   if (type === 'todo') return {type, title: 'To-do', folders: [], labels: [], display: 'list'};
   if (type === 'toc') return {type, title: 'Contents', indentByStyle: false, titleLevels: [1, 2, 3, 4]};
+  if (type === 'relay') return {type, title: 'Relay tasks', groupBy: 'due', showDetail: false};
   return {type: 'apps', title: 'Apps', apps: []};
 }
 

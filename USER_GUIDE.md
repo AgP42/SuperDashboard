@@ -6,7 +6,7 @@ SuperDashboard adds a floating **house bubble** (and a toolbar button) to your S
 a **dashboard you compose yourself** from **modules**: shortcuts, a file browser, search (names,
 keywords and note headings), a Contents outline of the note you're in, recent files, stars, keywords, a
 clock, device status, app launchers, and Note Clips and To-dos (captured from notes, and from PDFs /
-EPUBs). Lay them out in 1, 2 or 3 columns, in the design and font you like. It runs **fully on-device and
+EPUBs), plus your Supernote to-dos when you use the Relay app. Lay them out in 1, 2 or 3 columns, in the design and font you like. It runs **fully on-device and
 offline**: no account, no network.
 
 | A note page: a star, a clip, a to-do | The dashboard it builds |
@@ -339,7 +339,29 @@ don't count against the 200-clip cap; deleting one removes only its "#N" from th
 |---|---|
 | ![To-do mark](docs/img/note-marks.png) | ![To-do checked](docs/img/note-todo-checked.png) |
 
-### 4.13 ▭ Empty
+### 4.13 ⇄ Relay tasks (beta)
+
+**What it does:** shows your **Supernote to-dos** (the system To-do app's tasks) on the dashboard. A
+plugin can't read those tasks itself, so this module works together with
+**[Relay](https://relay.kioku.uk/)**, a separate Mac app by u/stuffimadeuk that syncs Supernote to-dos
+with Apple Reminders, Todoist, TickTick and others. Relay writes a snapshot of your tasks to
+`MyStyle/Plugins/Relay/relay-tasks.json`, Supernote Cloud sync brings it to the device, and this block
+reads it.
+**How to set it up:** in Relay, turn on its SuperDashboard export (needs a Relay version that has it;
+see Relay's help); on the Supernote, make sure
+**MyStyle** is ticked in the sync folders; sync; then add the **Relay tasks** block here.
+**How to configure:** **Group open tasks by** — **Due date** (Overdue, Today, Tomorrow, Next 7 days,
+Later, No date) or **List** (in your Supernote list order). **Task notes** — **Hide** / **Show** each
+task's notes under its title.
+**Using it:** **Open** / **Done** tabs (Done shows the 50 most recently finished). Important tasks show
+a ❗, a reminder a 🔔, and overdue ones a ⚠. Tap a task made from a note (📝) to open that note on its
+page. **↻** re-reads the file.
+**Good to know:** it is **read-only** and fully **offline**: SuperDashboard only reads that file; it
+never contacts Relay or the cloud, and ticking tasks off is done in the To-do app or in Relay. The top
+line says how old the export is ("Updated by Relay 2 h ago"). While a sync replaces the file it can be
+briefly missing: the block then keeps showing the last good copy and says so.
+
+### 4.14 ▭ Empty
 
 **What it does:** a blank block that reserves vertical space, pushes the blocks below it down, and
 lines the columns up with one another.

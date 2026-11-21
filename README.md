@@ -27,6 +27,8 @@ and font you like. It runs **fully on-device and offline**: no account, no netwo
   thumbnails you can paste back as native ink or editable text.
 - **To-do**: tasks captured the same way; a note task gets a tick-box you check from the dashboard or by
   hand, a PDF / EPUB task is dashboard-only.
+- **Relay tasks** (beta): your Supernote to-dos, exported by the [Relay](https://relay.kioku.uk/) Mac app,
+  grouped by due date or list; tap one made from a note to open that note on its page.
 - **Empty**: a spacer to line columns up (preset or exact px height).
 
 Blocks arrange in 1 / 2 / 3 columns (masonry or fixed height), collapse to their title, and each has an
