@@ -154,7 +154,7 @@ function SearchZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'searc
     const h = setTimeout(() => {
       const t0 = Date.now();
       warmSearch(idx, withTitles ? tts : []);
-      plog(`search:warm ${Date.now() - t0}ms`);
+      if (Date.now() - t0 >= 100) plog(`search:warm ${Date.now() - t0}ms`);
     }, 300);
     return () => clearTimeout(h);
   }, [idx, tts, withTitles]);
@@ -351,7 +351,7 @@ function NavZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'nav'}>; 
   const [entries, setEntries] = useState<NavEntry[]>([]);
   useEffect(() => setDir(root), [root, nonce]);
   useEffect(() => {
-    DashboardNative.listDir(dir)
+    timed('nav:list', () => DashboardNative.listDir(dir), (x: any) => `${x?.length ?? 0} entries`)
       .then((x: NavEntry[]) => setEntries((x ?? []).filter(e => e.isDir || NAV_EXT.test(e.name))))
       .catch(() => setEntries([]));
   }, [dir]);
@@ -407,7 +407,7 @@ function ClipsZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type
   const [activeLabels, setActiveLabels] = useState<Set<string>>(() => new Set());
   const repaintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reload = () =>
-    listClips()
+    timed('clips:load', listClips, cs => `${cs.length} clips`)
       .then(cs => {
         setClips(cs);
         // One clean image remount shortly after load (e-ink smear fix). Debounced:
@@ -561,7 +561,7 @@ function TodoZone({zone, theme, ts, nonce, columns}: {zone: Extract<Zone, {type:
   const cancelScan = useRef(false);
   const repaintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reload = () =>
-    listClips()
+    timed('todo:load', listClips, cs => `${cs.length} clips`)
       .then(cs => {
         setClips(cs);
         if (repaintTimer.current) clearTimeout(repaintTimer.current);
@@ -1049,7 +1049,7 @@ function ClipLabelEditor({clip, font, onSave, onClose}: {clip: Clip; font?: stri
 function RecentZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'recent'}>; theme: Theme; ts: TScale; nonce?: number}) {
   const [paths, setPaths] = useState<string[] | null>(null);
   useEffect(() => {
-    readRecent().then(setPaths);
+    timed('recent:load', readRecent, v => `${v.length} files`).then(setPaths);
     // re-read every time the dashboard is re-entered (nonce changes)
   }, [nonce]);
   useEffect(() => {
@@ -1269,6 +1269,12 @@ function RelayZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'relay'
   };
 
   const age = feed ? ageLabel(feed.generatedAt) : '';
+  // Three clocks, so "it doesn't refresh" can be told apart: when Relay wrote the
+  // feed (generatedAt), when sync delivered the file here (its mtime), and when
+  // this block last read it (every open, Refresh all, ↻).
+  const synced = st?.fileMtime ? ageLabel(new Date(st.fileMtime).toISOString()) : '';
+  const hhmm = (d: Date) => `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const checked = st?.checkedAt ? hhmm(new Date(st.checkedAt)) : '';
   return (
     <ZoneFrame
       theme={theme}
@@ -1290,7 +1296,10 @@ function RelayZone({zone, theme, ts, nonce}: {zone: Extract<Zone, {type: 'relay'
       {feed && (
         <>
           <Text style={[{fontSize: 11 * s, color: '#666666', marginBottom: 4}, ff]}>
-            {st?.status === 'stale-copy' ? `Relay file unavailable right now: showing the copy from ${age}.` : `Updated by Relay ${age}.`}
+            {st?.status === 'stale-copy'
+              ? `Relay file unavailable right now: showing the copy from ${age}.`
+              : `Updated by Relay ${age}${synced ? `, synced to this Supernote ${synced}` : ''}.`}
+            {checked ? ` Checked at ${checked}.` : ''}
           </Text>
           <View style={{flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 2}}>
             {([['open', `Open${open.length ? ` (${open.length})` : ''}`], ['done', 'Done']] as const).map(([v, label]) => (
@@ -1460,6 +1469,7 @@ function useZoneScan(
   scan: ScanSettings,
   nonce: number | undefined,
   doScan: (setProgress: (p: string) => void, manual: boolean) => Promise<void>,
+  label = 'scan',
 ) {
   const [, force] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -1472,13 +1482,15 @@ function useZoneScan(
   const refresh = async (manual = false) => {
     setBusy(true);
     setProgress('scan…');
-    await doScan(setProgress, manual);
+    // Errors are swallowed inside the scanners; timed() only measures here.
+    await timed(`scan:${label}${manual ? ' (manual)' : ' (auto)'}`, () => doScan(setProgress, manual)).catch(() => {});
     setBusy(false);
     setProgress('');
     force(x => x + 1);
   };
   useEffect(() => {
-    if (!busy && shouldAutoScan(cachedAt, scan.autoRefreshHours, scan.autoOnOpen)) refresh(false);
+    const auto = shouldAutoScan(cachedAt, scan.autoRefreshHours, scan.autoOnOpen);
+    if (!busy && auto) refresh(false);
     const sub = DeviceEventEmitter.addListener('dashboard_refresh_all', () => refresh(true));
     return () => sub.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1497,7 +1509,7 @@ function StarsZone({zone, scan, theme, ts, sib, nonce}: {zone: Extract<Zone, {ty
       setP(`${phase === 'ocr' ? (lineMode === 'text' ? 'OCR' : 'render') : 'scan'} ${d}/${t}`),
     );
     setStars(folders, {at: Date.now(), notes: res.notes, truncated: res.truncated, total: res.total}, lineMode);
-  });
+  }, `stars[${lineMode}]`);
 
   const canDelete = zone.canDelete ?? false;
   const fold = useNoteFold('stars', !!zone.notesFolded);
@@ -1593,7 +1605,7 @@ function KeywordsZone({zone, scan, theme, ts, sib, nonce}: {zone: Extract<Zone, 
     // only when the Stars zone itself scans.
     const res = await scanKeywords(folders, !!sib?.stars, (d, t) => setP(`scan ${d}/${t}`));
     setKeywords(folders, {at: Date.now(), hits: res.hits, truncated: res.truncated, total: res.total});
-  });
+  }, 'keywords');
 
   const fold = useNoteFold('keywords', !!zone.notesFolded);
   const meta = `${zone.sort === 'note' ? 'by note' : 'by keyword'} · ${formatScanTime(cached?.at)}`;

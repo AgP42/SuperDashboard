@@ -13,7 +13,7 @@ import {tscale, ZoneView} from './src/zones';
 import {setCornerRadius, ThemedButton, ui} from './src/ui';
 import {SettingsScreen} from './src/settings';
 import {autoRefreshTitles} from './src/notetoc';
-import {timed} from './src/perf';
+import {markOpen, ready, timed} from './src/perf';
 
 const SCALE: Record<string, number> = {S: 1, M: 1.18, L: 1.4, XL: 1.7};
 
@@ -69,7 +69,8 @@ function DashboardScreen(): React.JSX.Element {
   useEffect(() => {
     let alive = true;
     const enter = () => {
-      loadConfig().then(async c => {
+      markOpen('route');
+      timed('config:load', loadConfig, c => `${c.zones.length} blocks`).then(async c => {
         if (!alive) return;
         // Register the user's MyStyle font (if any) BEFORE showing the config, so the
         // fontFamily resolves on the first render (RN won't re-resolve a font added later).
@@ -81,6 +82,8 @@ function DashboardScreen(): React.JSX.Element {
         if (!alive) return;
         setCfg(c);
         setNonce(n => n + 1);
+        // Logged once React has committed the dashboard for this entry.
+        requestAnimationFrame(() => ready('dashboard rendered', `${c.zones.filter(z => !z.collapsed).length} open blocks`));
         // Keep the shared title cache fresh for Search even when no Contents block
         // is shown: re-read notes modified since the last watermark. Deferred so it
         // never blocks the open; runs only when something actually needs titles.
@@ -189,7 +192,10 @@ function DashboardScreen(): React.JSX.Element {
           SuperDashboard
         </Text>
         <View style={ui.headerBtns}>
-          <ThemedButton theme={theme} s={ts.s} font={fontFamily} label="↻ Refresh all" onPress={() => DeviceEventEmitter.emit('dashboard_refresh_all')} />
+          <ThemedButton theme={theme} s={ts.s} font={fontFamily} label="↻ Refresh all" onPress={() => {
+              markOpen('refresh all');
+              DeviceEventEmitter.emit('dashboard_refresh_all');
+            }} />
           <ThemedButton theme={theme} s={ts.s} font={fontFamily} label="⊖ Fold" onPress={() => leavePlugin()} />
         </View>
       </View>

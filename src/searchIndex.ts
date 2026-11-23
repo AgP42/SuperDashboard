@@ -12,6 +12,7 @@
 import {NativeModules} from 'react-native';
 
 import {allTitles} from './notetoc';
+import {plog, timedSync} from './perf';
 import {cacheDir} from './paths';
 import {isSdPath, SD_SYSTEM_DIR, sdRoots, searchSdEnabled} from './storage';
 
@@ -123,6 +124,7 @@ export async function buildIndex(): Promise<IndexData> {
   if (building) return building;
   building = (async () => {
     const sd = await searchSdEnabled();
+    const t0 = Date.now();
     const internal = await walk(INDEX_ROOTS);
     const entries = internal.entries;
     let truncated = internal.truncated;
@@ -133,6 +135,7 @@ export async function buildIndex(): Promise<IndexData> {
       entries.push(...card.entries);
       truncated = truncated || card.truncated;
     }
+    plog(`search:buildIndex walk ${Date.now() - t0}ms, ${entries.length} entries${truncated ? ' TRUNCATED' : ''}${sd ? ' +SD' : ''}`);
     const data: IndexData = {at: Date.now(), entries, truncated, sd};
     mem = data;
     try {
@@ -169,7 +172,7 @@ export async function loadIndex(): Promise<IndexData> {
     try {
       const dir = await cacheDir();
       const text: string = await DashboardNative.readTextFile(dir + INDEX_FILE);
-      if (text && text.trim()) mem = JSON.parse(text);
+      if (text && text.trim()) mem = timedSync('searchindex:parse', () => JSON.parse(text), () => `${Math.round(text.length / 1024)}KB`);
     } catch {
       /* no snapshot yet */
     }
@@ -188,7 +191,7 @@ export async function loadKeywords(): Promise<KwEntry[]> {
     const dir = await cacheDir();
     const text: string = await DashboardNative.readTextFile(dir + SCAN_CACHE_FILE);
     if (!text || !text.trim()) return [];
-    const obj = JSON.parse(text);
+    const obj = timedSync('scancache:parse(search)', () => JSON.parse(text), () => `${Math.round(text.length / 1024)}KB`);
     const out: KwEntry[] = [];
     for (const [path, e] of Object.entries<any>(obj.files ?? {})) {
       for (const k of e?.keywords ?? []) {
@@ -578,7 +581,7 @@ export async function loadStarredFiles(): Promise<Set<string>> {
     const dir = await cacheDir();
     const text: string = await DashboardNative.readTextFile(dir + SCAN_CACHE_FILE);
     if (!text || !text.trim()) return set;
-    const obj = JSON.parse(text);
+    const obj = timedSync('scancache:parse(search)', () => JSON.parse(text), () => `${Math.round(text.length / 1024)}KB`);
     for (const [path, e] of Object.entries<any>(obj.files ?? {})) {
       if ((e?.stars?.length ?? 0) > 0) set.add(path);
     }

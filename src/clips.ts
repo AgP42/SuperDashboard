@@ -49,16 +49,31 @@ function isClip(c: any): c is Clip {
   return c && typeof c.id === 'string' && typeof c.png === 'string' && typeof c.sourcePath === 'string';
 }
 
-async function load(): Promise<Clip[]> {
-  if (mem) return mem;
-  mem = [];
+// The first read is shared by every caller that arrives while it runs (the
+// Clips and To-do blocks both load on open; a lasso capture can land at the same
+// moment). Handing them an empty placeholder showed an empty block and, worse,
+// let a concurrent add persist a list holding only the new clip.
+let loading: Promise<Clip[]> | null = null;
+
+function load(): Promise<Clip[]> {
+  if (mem) return Promise.resolve(mem);
+  if (!loading) {
+    loading = readClips().finally(() => {
+      loading = null;
+    });
+  }
+  return loading;
+}
+
+async function readClips(): Promise<Clip[]> {
+  let next: Clip[] = [];
   try {
     const dir = await cacheDir();
     const text: string = await DashboardNative.readTextFile(dir + CLIPS_FILE);
     if (text && text.trim()) {
       const obj = JSON.parse(text);
       if (typeof obj.markSeq === 'number') markSeq = obj.markSeq;
-      mem = (obj.clips ?? []).filter(isClip).map((c: any) => ({
+      next = (obj.clips ?? []).filter(isClip).map((c: any) => ({
         ...c,
         labels: Array.isArray(c.labels) ? c.labels : [],
         // Before to-dos had their own block, a task was an ordinary clip
@@ -69,7 +84,9 @@ async function load(): Promise<Clip[]> {
   } catch {
     /* none yet */
   }
-  return mem!;
+  // A write that finished while we were reading wins (it started from mem).
+  if (!mem) mem = next;
+  return mem;
 }
 
 async function persist(): Promise<void> {

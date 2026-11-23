@@ -10,6 +10,7 @@ import {starLineImages, starLineTexts, LineImg, unwrap} from './starText';
 import {LineMode} from './config';
 import {cacheDir, LEGACY_CACHE_DIR} from './paths';
 import {SD_SYSTEM_DIR, sdRoots} from './storage';
+import {plog, SLOW_MS, timedSync} from './perf';
 
 const {DashboardNative} = NativeModules;
 
@@ -90,6 +91,8 @@ async function walkNotes(roots: string[]): Promise<{files: NoteFile[]; truncated
   let frontier = start.length ? start : [DEVICE_ROOT];
   let truncated = false;
   const seen = new Set<string>();
+  const t0 = Date.now();
+  let levels = 0;
 
   while (frontier.length) {
     if (out.length >= MAX_FILES || seen.size >= MAX_DIRS) {
@@ -121,8 +124,10 @@ async function walkNotes(roots: string[]): Promise<{files: NoteFile[]; truncated
       }
     }
     frontier = next;
+    levels++;
   }
   out.sort((a, b) => b.mtime - a.mtime); // most recent first
+  if (truncated || Date.now() - t0 >= 1000) plog(`walk ${start.length || 'device'} roots: ${seen.size} dirs listed, ${out.length} notes, ${levels} levels, ${Date.now() - t0}ms${truncated ? ' TRUNCATED' : ''}`);
   return {files: out, truncated};
 }
 
@@ -150,6 +155,9 @@ interface FileScan {
   keywords?: {keyword: string; page: number}[]; // 1-based page; undefined = not scanned
 }
 const CACHE_FILE = 'scancache.json';
+/** 2 = SDK refusals are no longer cached as "no stars / no keywords" (a v1 cache
+ *  may hold such false negatives, so it is discarded once: one full rescan). */
+const CACHE_VERSION = 2;
 let fileCache: Map<string, FileScan> | null = null;
 let cacheDirty = false;
 
@@ -157,6 +165,8 @@ async function loadCache(): Promise<Map<string, FileScan>> {
   if (fileCache) return fileCache;
   const map = new Map<string, FileScan>();
   const dir = await cacheDir();
+  const t0 = Date.now();
+  let bytes = 0;
   try {
     // Native reader like every other file read (fetch caches file:// URLs).
     let text: string = await DashboardNative.readTextFile(dir + CACHE_FILE);
@@ -168,8 +178,10 @@ async function loadCache(): Promise<Map<string, FileScan>> {
       migrated = true;
     }
     if (text && text.trim()) {
-      const obj = JSON.parse(text);
-      for (const [k, v] of Object.entries(obj.files ?? {})) map.set(k, v as FileScan);
+      bytes = text.length;
+      const obj = timedSync('scancache:parse', () => JSON.parse(text));
+      if (obj.version === CACHE_VERSION) for (const [k, v] of Object.entries(obj.files ?? {})) map.set(k, v as FileScan);
+      else plog(`scancache v${obj.version} discarded (now v${CACHE_VERSION}): one full rescan`);
       if (migrated) {
         // Migrated entries reference line PNGs in the legacy dir, which we
         // purge; drop the previews so the next scan regenerates them in the
@@ -188,13 +200,15 @@ async function loadCache(): Promise<Map<string, FileScan>> {
     /* no cache yet */
   }
   fileCache = map;
+  if (Date.now() - t0 >= SLOW_MS) plog(`scancache load ${Date.now() - t0}ms ${Math.round(bytes / 1024)}KB ${map.size} files`);
   return map;
 }
 
 async function saveCache(): Promise<void> {
   if (!fileCache || !cacheDirty) return;
   const dir = await cacheDir();
-  const json = JSON.stringify({version: 1, files: Object.fromEntries(fileCache)});
+  const t0 = Date.now();
+  const json = JSON.stringify({version: CACHE_VERSION, files: Object.fromEntries(fileCache)});
   try {
     await DashboardNative.writeFile(dir + CACHE_FILE, json);
   } catch {
@@ -208,6 +222,7 @@ async function saveCache(): Promise<void> {
     }
   }
   cacheDirty = false;
+  if (Date.now() - t0 >= SLOW_MS) plog(`scancache save ${Date.now() - t0}ms ${Math.round(json.length / 1024)}KB ${fileCache.size} files`);
   purgeLegacyOnce(dir);
 }
 
@@ -230,6 +245,8 @@ function purgeLegacyOnce(dir: string) {
  */
 async function sweepLineImages(): Promise<void> {
   if (!fileCache) return;
+  const t0 = Date.now();
+  let pruned = 0;
   try {
     const dir = await cacheDir();
     const keep = new Set<string>();
@@ -244,16 +261,77 @@ async function sweepLineImages(): Promise<void> {
     for (const en of entries) {
       if (!en.isDir && en.name.startsWith('line_') && !keep.has(en.name)) {
         await DashboardNative.pruneMatching(dir, en.name, '');
+        pruned++;
       }
     }
   } catch {
     /* best-effort GC */
   }
+  if (pruned || Date.now() - t0 >= 300) plog(`line-image sweep ${Date.now() - t0}ms, ${pruned} pruned`);
 }
 
+/** An SDK call that refused (e.g. code 118, "the handwriting app is not open")
+ *  must never be read as "nothing found": unwrap() hands back the error object,
+ *  which read as "no stars", got cached, and hid starred notes until the note
+ *  changed. Throw instead, so the file stays unscanned and is retried next scan. */
+function okOrThrow(res: any, what: string): void {
+  if (res && typeof res === 'object' && !Array.isArray(res) && res.success === false) {
+    throw new Error(`${what}: ${res.error?.message ?? 'refused'}`);
+  }
+}
+
+/** Per-scan counters for the perf log (reset by ensureScanned). */
+const fileStats = {fileRead: 0, fileFail: 0, sdk: 0, refused: 0, verified: 0, mismatch: 0};
+
+/** Compare the native file reader with the SDK on the first few notes of each
+ *  scan (beta check of the reader; counts only in the log). */
+const VERIFY_PER_SCAN = 8;
+
 async function scanFileStars(path: string, mode: LineMode, mtime: number): Promise<StarPage[]> {
-  const pageIdx = unwrap<number[]>(await PluginFileAPI.searchFiveStars(path)) ?? [];
-  if (!pageIdx.length) return [];
+  // Read the stars straight from the .note file: one native call, works with the
+  // Notes app closed. The SDK is the fallback when the file can't be parsed.
+  let pages: StarPage[] | null = null;
+  try {
+    const list: {page: number; count: number}[] = await DashboardNative.fileStars(path);
+    pages = list.map(e => ({page: e.page, count: e.count})).sort((a, b) => a.page - b.page);
+    fileStats.fileRead++;
+  } catch (e: any) {
+    fileStats.fileFail++;
+    plog(`stars: file read failed (${e?.message ?? e}), using the SDK`);
+  }
+  if (pages && fileStats.verified < VERIFY_PER_SCAN) {
+    fileStats.verified++;
+    try {
+      const sdk = await sdkStarPages(path);
+      const sig = (ps: StarPage[]) => ps.map(p => `${p.page}x${p.count}`).join(',');
+      if (sig(pages) !== sig(sdk)) {
+        fileStats.mismatch++;
+        const n = (ps: StarPage[]) => `${ps.length} pages/${ps.reduce((s, p) => s + p.count, 0)} stars`;
+        plog(`stars VERIFY MISMATCH: file=${n(pages)} [${sig(pages)}] sdk=${n(sdk)} [${sig(sdk)}]`);
+      }
+    } catch {
+      fileStats.verified--; // SDK refused (Notes app closed): no comparison
+    }
+  }
+  if (!pages) {
+    fileStats.sdk++;
+    try {
+      pages = await sdkStarPages(path);
+    } catch (e) {
+      fileStats.refused++;
+      throw e;
+    }
+  }
+  await addLinePreview(path, pages, mode, mtime);
+  return pages;
+}
+
+/** Stars through the SDK (needs the Notes app; a refusal throws). 1-based pages. */
+async function sdkStarPages(path: string): Promise<StarPage[]> {
+  const raw = await PluginFileAPI.searchFiveStars(path);
+  okOrThrow(raw, 'searchFiveStars');
+  const pageIdx = unwrap<number[]>(raw) ?? [];
+  if (!Array.isArray(pageIdx) || !pageIdx.length) return [];
   const counts = new Map<number, number>();
   // ⚠️ CHAUVET 1-INDEX: DEVICE-TEST. `p` is searchFiveStars' page index; we treat
   // it as 0-based and store StarPage.page 1-based for display/open. The round-trip
@@ -264,9 +342,7 @@ async function scanFileStars(path: string, mode: LineMode, mtime: number): Promi
   // is now 1-based, `p + 1` over-counts → the shown page and the opened page are one
   // too high. Verify on device; if so, drop the +1 here (and mirror in getKeyWords below).
   for (const p of pageIdx) counts.set(p + 1, (counts.get(p + 1) ?? 0) + 1); // 0→1-based
-  const pages: StarPage[] = [...counts.entries()].map(([page, count]) => ({page, count})).sort((a, b) => a.page - b.page);
-  await addLinePreview(path, pages, mode, mtime);
-  return pages;
+  return [...counts.entries()].map(([page, count]) => ({page, count})).sort((a, b) => a.page - b.page);
 }
 
 /** Populate pages[].lines (image) or .texts (OCR) per the mode ('off' = nothing).
@@ -291,7 +367,9 @@ async function addLinePreview(path: string, pages: StarPage[], mode: LineMode, m
 }
 
 async function scanFileKeywords(path: string): Promise<{keyword: string; page: number}[]> {
-  const total = unwrap<number>(await PluginFileAPI.getNoteTotalPageNum(path)) ?? 0;
+  const rawTotal = await PluginFileAPI.getNoteTotalPageNum(path);
+  okOrThrow(rawTotal, 'getNoteTotalPageNum');
+  const total = unwrap<number>(rawTotal) ?? 0;
   // ⚠️ CHAUVET 1-INDEX: DEVICE-TEST. This builds a 0-based page list [0..total-1]
   // for getKeyWords and treats the returned k.page as 0-based (→ +1 for display/open).
   // If Chauvet's getKeyWords is now 1-indexed, two things break together: page 0 in
@@ -299,7 +377,10 @@ async function scanFileKeywords(path: string): Promise<{keyword: string; page: n
   // (missed keywords), and `k.page + 1` shows/opens one page too high. If device
   // testing confirms 1-indexing, use [1..total] here and drop the +1 below.
   const pageList = Array.from({length: total}, (_, k) => k);
-  const kws = unwrap<any[]>(await PluginFileAPI.getKeyWords(path, pageList)) ?? [];
+  const rawKw = await PluginFileAPI.getKeyWords(path, pageList);
+  okOrThrow(rawKw, 'getKeyWords');
+  const kws = unwrap<any[]>(rawKw) ?? [];
+  if (!Array.isArray(kws)) return [];
   return kws.map((k: any) => ({keyword: k?.keyword ?? '', page: (k?.page ?? 0) + 1}));
 }
 
@@ -312,6 +393,17 @@ async function ensureScanned(
   const cache = await loadCache();
   const mode: LineMode = need.lineMode ?? 'off';
   let lastEmit = Date.now();
+  const t0 = Date.now();
+  Object.assign(fileStats, {fileRead: 0, fileFail: 0, sdk: 0, refused: 0, verified: 0, mismatch: 0});
+  let cached = 0;
+  let starScans = 0;
+  let starMs = 0;
+  let previews = 0;
+  let previewMs = 0;
+  let kwScans = 0;
+  let kwMs = 0;
+  let failed = 0;
+  let slowest = 0;
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     let e = cache.get(f.path);
@@ -321,27 +413,43 @@ async function ensureScanned(
       cacheDirty = true;
     }
     let ocr = false;
+    const tf = Date.now();
+    let touched = false;
     try {
       if (need.stars) {
         if (e.stars === undefined) {
+          const ts = Date.now();
+          touched = true;
           e.stars = await scanFileStars(f.path, mode, f.mtime);
+          starScans++;
+          starMs += Date.now() - ts;
           e.starsLineMode = mode;
           cacheDirty = true;
           ocr = mode !== 'off' && e.stars.length > 0;
         } else if (mode !== 'off' && e.starsLineMode !== mode) {
+          const ts = Date.now();
+          touched = true;
           await addLinePreview(f.path, e.stars, mode, f.mtime);
+          previews++;
+          previewMs += Date.now() - ts;
           e.starsLineMode = mode;
           cacheDirty = true;
           ocr = e.stars.length > 0;
         }
       }
       if (need.keywords && e.keywords === undefined) {
+        const tk = Date.now();
+        touched = true;
         e.keywords = await scanFileKeywords(f.path);
+        kwScans++;
+        kwMs += Date.now() - tk;
         cacheDirty = true;
       }
     } catch {
-      /* skip unreadable file */
+      failed++; // unreadable file or SDK refusal: left unscanned, retried next scan
     }
+    if (touched) slowest = Math.max(slowest, Date.now() - tf);
+    else cached++;
     // Time-throttle progress (~3/s): a state update per file caused an e-ink
     // re-render storm (~80ms each). Throttling keeps the count moving smoothly on
     // a cold scan while a warm (all-cached) rescan stays one render.
@@ -352,6 +460,13 @@ async function ensureScanned(
     }
   }
   onProgress?.(files.length, files.length, 'scan'); // final
+  const fs = fileStats;
+  // An all-cached rescan (the usual open) has nothing to report.
+  if (starScans || previews || kwScans || failed || fs.refused || fs.mismatch) plog(
+    `scan files: ${files.length} notes (${need.stars ? `stars/${mode}` : ''}${need.keywords ? ' +keywords' : ''}), ${cached} cached, ` +
+      `${starScans} star reads ${starMs}ms [file ${fs.fileRead}, file-fail ${fs.fileFail}, sdk ${fs.sdk}, refused ${fs.refused}, verified ${fs.verified}, mismatch ${fs.mismatch}], ` +
+      `${previews} previews ${previewMs}ms, ${kwScans} keyword reads ${kwMs}ms, ${failed} failed, slowest ${slowest}ms, total ${Date.now() - t0}ms`,
+  );
   await saveCache();
   return cache;
 }

@@ -21,20 +21,32 @@ const MAX_PER_KIND = 500; // bound the file; oldest flips drop first
 type Kind = 'stars' | 'keywords' | 'relay';
 let mem: Record<Kind, string[]> | null = null;
 
-async function load(): Promise<Record<Kind, string[]>> {
-  if (mem) return mem;
-  mem = {stars: [], keywords: [], relay: []};
-  try {
-    const dir = await cacheDir();
-    const text: string = await DashboardNative.readTextFile(dir + FILE);
-    const obj = text && text.trim() ? JSON.parse(text) : null;
-    for (const k of ['stars', 'keywords', 'relay'] as Kind[]) {
-      if (Array.isArray(obj?.[k])) mem[k] = obj[k].filter((p: any) => typeof p === 'string');
-    }
-  } catch {
-    /* none yet */
+// Shared first read (several blocks load their folds at once on open): a caller
+// arriving mid-read must get the loaded folds, not an empty placeholder.
+let loading: Promise<Record<Kind, string[]>> | null = null;
+
+function load(): Promise<Record<Kind, string[]>> {
+  if (mem) return Promise.resolve(mem);
+  if (!loading) {
+    loading = (async () => {
+      const next: Record<Kind, string[]> = {stars: [], keywords: [], relay: []};
+      try {
+        const dir = await cacheDir();
+        const text: string = await DashboardNative.readTextFile(dir + FILE);
+        const obj = text && text.trim() ? JSON.parse(text) : null;
+        for (const k of ['stars', 'keywords', 'relay'] as Kind[]) {
+          if (Array.isArray(obj?.[k])) next[k] = obj[k].filter((p: any) => typeof p === 'string');
+        }
+      } catch {
+        /* none yet */
+      }
+      if (!mem) mem = next;
+      return mem;
+    })().finally(() => {
+      loading = null;
+    });
   }
-  return mem;
+  return loading;
 }
 
 async function save(): Promise<void> {

@@ -26,6 +26,7 @@ import {cacheDir} from './paths';
 import {notesModifiedSince, NoteFile} from './scanner';
 import {recognize, recycleAll, unwrap} from './starText';
 import {sdRoots, searchSdEnabled} from './storage';
+import {plog, SLOW_MS, timed, timedSync} from './perf';
 
 const {DashboardNative} = NativeModules;
 const TOC_FILE = 'toccache.json';
@@ -68,21 +69,39 @@ interface CacheShape {
 let mem: CacheShape | null = null;
 let dirty = false;
 
+// The first load is shared: callers that arrive while the file is being read
+// (title search + the auto refresh both start on a dashboard open) must wait for
+// it. Handing them an empty placeholder made them see "no titles" and a zero
+// watermark, so the auto refresh treated the whole library as modified.
+let loading: Promise<CacheShape> | null = null;
+
 async function loadCache(): Promise<CacheShape> {
   if (mem) return mem;
-  mem = {version: CACHE_VERSION, notes: {}};
-  try {
-    const dir = await cacheDir();
-    const text: string = await DashboardNative.readTextFile(dir + TOC_FILE);
-    if (text && text.trim()) {
-      const obj = JSON.parse(text);
-      // Discard a cache written by a different layout rather than mis-reading it.
-      if (obj && obj.notes && obj.version === CACHE_VERSION) mem = {version: CACHE_VERSION, notes: obj.notes, lastIndexAt: obj.lastIndexAt, lastFullIndexAt: obj.lastFullIndexAt};
-    }
-  } catch {
-    /* none yet */
+  if (!loading) {
+    loading = (async () => {
+      let next: CacheShape = {version: CACHE_VERSION, notes: {}};
+      const t0 = Date.now();
+      let bytes = 0;
+      try {
+        const dir = await cacheDir();
+        const text: string = await DashboardNative.readTextFile(dir + TOC_FILE);
+        if (text && text.trim()) {
+          bytes = text.length;
+          const obj = timedSync('toccache:parse', () => JSON.parse(text));
+          // Discard a cache written by a different layout rather than mis-reading it.
+          if (obj && obj.notes && obj.version === CACHE_VERSION) next = {version: CACHE_VERSION, notes: obj.notes, lastIndexAt: obj.lastIndexAt, lastFullIndexAt: obj.lastFullIndexAt};
+        }
+      } catch {
+        /* none yet */
+      }
+      if (Date.now() - t0 >= SLOW_MS) plog(`toccache load ${Date.now() - t0}ms ${Math.round(bytes / 1024)}KB ${Object.keys(next.notes).length} notes`);
+      mem = next;
+      return next;
+    })().finally(() => {
+      loading = null;
+    });
   }
-  return mem!;
+  return loading;
 }
 
 /** Write the cache, but only when something actually changed: a plain cache hit
@@ -92,8 +111,11 @@ async function persist(): Promise<void> {
   if (!dirty || !mem) return;
   try {
     const dir = await cacheDir();
-    await DashboardNative.writeFile(dir + TOC_FILE, JSON.stringify(mem));
+    const t0 = Date.now();
+    const json = JSON.stringify(mem);
+    await DashboardNative.writeFile(dir + TOC_FILE, json);
     dirty = false;
+    if (Date.now() - t0 >= SLOW_MS) plog(`toccache save ${Date.now() - t0}ms ${Math.round(json.length / 1024)}KB`);
   } catch (e: any) {
     // Best-effort, but never silent: a failing save means every index run is lost.
     tlog(`cache save FAILED: ${e && e.message}`);
@@ -448,7 +470,8 @@ export async function autoRefreshTitles(): Promise<{modified: number; done: numb
     const t0 = Date.now();
     let modified: NoteFile[] = [];
     try {
-      modified = await notesModifiedSince(since, (await searchSdEnabled()) ? await sdRoots() : []);
+      const extra = (await searchSdEnabled()) ? await sdRoots() : [];
+      modified = await timed('toc:walk', () => notesModifiedSince(since, extra), m => `${m.length} modified, ${extra.length} SD roots`);
     } catch {
       return {modified: 0, done: 0, capped: false};
     }

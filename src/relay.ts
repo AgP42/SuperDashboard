@@ -118,9 +118,41 @@ export interface RelayState {
   feed: RelayFeed | null;
   /** For 'too-new': the schemaVersion found. */
   version?: number;
+  /** When relay-tasks.json last changed ON THIS DEVICE (ms), i.e. when sync
+   *  delivered it; undefined when the file is absent. Tells "Relay hasn't
+   *  exported" (old generatedAt) apart from "sync hasn't delivered it". */
+  fileMtime?: number;
+  /** When this read happened (ms): shown as "Checked at HH:MM". */
+  checkedAt?: number;
 }
 
 let mem: RelayFeed | null = null;
+/** The text last saved as the last-good copy (skip rewriting an unchanged feed). */
+let savedText: string | null = null;
+
+/** mtime of relay-tasks.json, from a listing of its folder (no stat API). */
+async function fileInfo(): Promise<{mtime: number} | null> {
+  try {
+    const dir = RELAY_PATH.substring(0, RELAY_PATH.lastIndexOf('/'));
+    const name = RELAY_PATH.substring(RELAY_PATH.lastIndexOf('/') + 1);
+    const entries: {name: string; mtime: number}[] = (await DashboardNative.listDir(dir)) ?? [];
+    const e = entries.find(x => x.name === name);
+    return e ? {mtime: e.mtime} : null;
+  } catch {
+    return null;
+  }
+}
+
+function logLoad(st: RelayState, info: {mtime: number} | null, bytes: number): void {
+  // Status, counts and timestamps only: never task text (debug-log privacy rule).
+  const iso = (ms?: number) => (ms ? new Date(ms).toISOString().replace(/\.\d+Z$/, 'Z') : '-');
+  try {
+    DashboardNative?.appendLog?.(
+      `[relay] ${st.status} tasks=${st.feed?.tasks.length ?? 0} generatedAt=${st.feed?.generatedAt ?? '-'} ` +
+        `file mtime=${iso(info?.mtime)} bytes=${info ? bytes : 0}`,
+    ).catch(() => {});
+  } catch {}
+}
 
 async function readText(path: string): Promise<string | null> {
   try {
@@ -142,15 +174,26 @@ async function lastGood(): Promise<RelayFeed | null> {
 /** Read the feed. On a missing/broken file, fall back to the last good copy
  *  ('stale-copy'); only report missing/unreadable when there's nothing to show. */
 export async function loadRelay(): Promise<RelayState> {
-  const text = await readText(RELAY_PATH);
+  const [text, info] = await Promise.all([readText(RELAY_PATH), fileInfo()]);
+  const st = await resolve(text);
+  st.fileMtime = info?.mtime;
+  st.checkedAt = Date.now();
+  logLoad(st, info, text?.length ?? 0);
+  return st;
+}
+
+async function resolve(text: string | null): Promise<RelayState> {
   if (text) {
     const p = parseRelay(text);
     if (p.ok) {
       mem = p.feed;
-      try {
-        await DashboardNative.writeFile((await cacheDir()) + LAST_GOOD_FILE, text);
-      } catch {
-        /* cache is best-effort */
+      if (text !== savedText) {
+        try {
+          await DashboardNative.writeFile((await cacheDir()) + LAST_GOOD_FILE, text);
+          savedText = text;
+        } catch {
+          /* cache is best-effort */
+        }
       }
       return {status: 'ok', feed: p.feed};
     }

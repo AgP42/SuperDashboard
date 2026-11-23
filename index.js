@@ -8,7 +8,8 @@ import {AppRegistry, AppState, DeviceEventEmitter, Image, NativeModules, ToastAn
 import App from './App';
 import {name as appName} from './app.json';
 
-import {PluginManager, PluginCommAPI, PluginNoteAPI, PluginDocAPI} from 'sn-plugin-lib';
+import {PluginManager, PluginCommAPI, PluginNoteAPI, PluginDocAPI, PluginFileAPI} from 'sn-plugin-lib';
+import {instrumentBridge, markOpen, plog} from './src/perf';
 import {setRoute} from './src/route';
 import {showBubbleFromConfig} from './src/bubble';
 import {hasSavedConfig, loadConfig} from './src/config';
@@ -20,6 +21,10 @@ import {cacheDir} from './src/paths';
 import {DIGITAL_FONT, DSEG7_BOLD_B64} from './src/fonts/dseg7';
 
 const {DashboardNative} = NativeModules;
+
+// Count and time every native call (perf logs: "bridge summary" lines). Done
+// before anything else runs so the first scan is measured too.
+instrumentBridge({PluginFileAPI, PluginCommAPI, PluginNoteAPI, PluginDocAPI});
 
 // On-device tracing for the bubble lifecycle. The firmware doesn't log window
 // removals and hideBubble() is silent, so without this the only way to know why
@@ -87,6 +92,7 @@ AppState.addEventListener('change', next => {
   blog(`[state] ${lastState} -> ${next}`);
   if (next === 'active') {
     activeSince = now;
+    plog('view visible (AppState active)');
     // A stray 'active' during a headless capture still hides the bubble here: we
     // must NOT diverge from AppState's own view of the world (a skipped hide
     // would leave lastState 'active' and the bubble floating over the next real
@@ -143,6 +149,7 @@ AppState.addEventListener('change', next => {
 //  - bubble tap → Dashboard
 // Module-level listeners survive plugin-view close (component listeners don't).
 DeviceEventEmitter.addListener('onBubbleTap', async () => {
+  markOpen('bubble tap');
   setRoute('dashboard');
   // Ask for the view; the bubble is NOT touched here. If the view actually
   // surfaces, AppState → 'active' hides it; if showPluginView lies (returns

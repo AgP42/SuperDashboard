@@ -10,6 +10,33 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.3.3 — 2026-11-23
+
+### Fixed
+- **Starred notes no longer vanish.** When the Notes app wasn't open, the Supernote refused to
+  list a note's stars, and that refusal was remembered as "no stars": the note dropped out of
+  the Stars block until you edited it. Stars are now read straight from the note file (faster,
+  and it works with the Notes app closed), and a refusal is never remembered. Your first scan
+  after updating reads every note once.
+- **Apps open like from the home screen.** An app that is already running is brought back
+  instead of being restarted (Atelier could crash).
+- **Note Clips / To-do could show up empty** when both blocks loaded at the same moment, and a
+  clip captured during that moment could replace the saved list. Fixed.
+- **Title search and Contents** no longer re-read your whole library now and then (a
+  start-up race made every note look modified).
+
+### Changed
+- **Relay tasks** shows when the file reached your Supernote and when the block last read
+  it, so you can tell "Relay hasn't exported" from "sync hasn't delivered it yet".
+- **Faster dashboard.** Several start-up delays are gone (the fixes above, plus fewer repeated
+  reads); the dashboard now shows in about a second.
+- The debug log notes what is slow (timings and counts only, never note content), and stays
+  quiet when everything is fast.
+
+Thanks to weedwhitesandwine (SuperHub) for the star reader and the app-launch fix.
+
+---
+
 ## v2.3.1 — 2026-11-21
 
 ### New

@@ -8,6 +8,7 @@
 import {NativeModules} from 'react-native';
 
 import {AppItem} from './apps';
+import {setPerfEnabled} from './perf';
 
 const {DashboardNative} = NativeModules;
 
@@ -288,6 +289,7 @@ export async function hasSavedConfig(): Promise<boolean> {
 
 /** Tell the native logger whether to write the log file (logcat always gets it). */
 function applyLogSetting(cfg: DashboardConfig): void {
+  setPerfEnabled(cfg.debugLog !== false);
   try {
     DashboardNative?.setFileLog?.(cfg.debugLog !== false).catch(() => {});
   } catch {}

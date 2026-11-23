@@ -145,15 +145,93 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
     public void launchActivity(String component, Promise promise) {
         try {
             String[] parts = component.split("/", 2);
-            Intent intent = new Intent();
-            intent.setComponent(new ComponentName(parts[0], parts[1]));
-            intent.setAction(Intent.ACTION_MAIN);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            // Open the app exactly as the launcher does (MAIN + LAUNCHER, reset task
+            // if needed): if it is already running, Android just brings its task to
+            // the front. A bare MAIN intent doesn't match the running task's root
+            // intent, so it was delivered as a NEW intent instead, and some apps
+            // (Atelier) crash on a new intent that lacks the extras they expect.
+            // (Fix from SuperHub, weedwhitesandwine's fork of SuperDashboard.)
+            Intent intent = null;
+            PackageManager pm = getReactApplicationContext().getPackageManager();
+            Intent launch = pm.getLaunchIntentForPackage(parts[0]);
+            if (launch != null && launch.getComponent() != null
+                    && (parts.length < 2 || launch.getComponent().getClassName().equals(parts[1]))) {
+                intent = launch;
+            }
+            if (intent == null) {
+                intent = new Intent(Intent.ACTION_MAIN);
+                intent.addCategory(Intent.CATEGORY_LAUNCHER);
+                intent.setComponent(new ComponentName(parts[0], parts[1]));
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             getReactApplicationContext().startActivity(intent);
             promise.resolve(true);
         } catch (Exception e) {
             promise.reject("LAUNCH_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Five-point stars per page, read straight from the .note file, so it works
+     * when the Notes app isn't open (the SDK's searchFiveStars then refuses) and
+     * costs one native call instead of an SDK round-trip per note.
+     * A .note is append-only: the last 4 bytes point at the current footer, whose
+     * <PAGEn:addr> tags point at each current page's metadata block (4-byte LE
+     * length + "<KEY:value>" tags); each star is one <FIVESTAR:...> tag there.
+     * Older copies of a page (erased stars) sit in unreferenced blocks and are
+     * ignored. Returns [{page (1-based), count}] for pages with at least one star.
+     * (Reader from SuperHub, weedwhitesandwine's fork of SuperDashboard.)
+     */
+    @ReactMethod
+    public void fileStars(String path, Promise promise) {
+        try (java.io.RandomAccessFile f = new java.io.RandomAccessFile(path, "r")) {
+            long len = f.length();
+            if (len < 32) throw new Exception("too short");
+            byte[] head = new byte[8];
+            f.readFully(head);
+            if (!new String(head, "ISO-8859-1").startsWith("note")) throw new Exception("not a note file");
+            f.seek(len - 4);
+            long footer = readLE32(f);
+            if (footer <= 0 || footer >= len) throw new Exception("bad footer");
+            f.seek(footer);
+            long flen = readLE32(f);
+            if (flen <= 0 || flen > 16_000_000 || footer + 4 + flen > len) throw new Exception("bad footer length");
+            byte[] fb = new byte[(int) flen];
+            f.readFully(fb);
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("<PAGE(\\d+):(\\d+)>").matcher(new String(fb, "ISO-8859-1"));
+            WritableArray out = Arguments.createArray();
+            int pages = 0;
+            while (m.find()) {
+                pages++;
+                int page = Integer.parseInt(m.group(1));
+                long addr = Long.parseLong(m.group(2));
+                if (addr <= 0 || addr >= len) continue;
+                f.seek(addr);
+                long mlen = readLE32(f);
+                if (mlen <= 0 || mlen > 4_000_000 || addr + 4 + mlen > len) continue;
+                byte[] mb = new byte[(int) mlen];
+                f.readFully(mb);
+                String meta = new String(mb, "ISO-8859-1");
+                int count = 0, i = 0;
+                while ((i = meta.indexOf("<FIVESTAR:", i)) >= 0) { count++; i += 10; }
+                if (count > 0) {
+                    WritableMap e = Arguments.createMap();
+                    e.putInt("page", page);
+                    e.putInt("count", count);
+                    out.pushMap(e);
+                }
+            }
+            if (pages == 0) throw new Exception("no pages in footer");
+            promise.resolve(out);
+        } catch (Exception e) {
+            promise.reject("FILE_STARS_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        }
+    }
+
+    private static long readLE32(java.io.RandomAccessFile f) throws java.io.IOException {
+        int b0 = f.read(), b1 = f.read(), b2 = f.read(), b3 = f.read();
+        if ((b0 | b1 | b2 | b3) < 0) throw new java.io.EOFException();
+        return (b0 & 0xffL) | ((b1 & 0xffL) << 8) | ((b2 & 0xffL) << 16) | ((b3 & 0xffL) << 24);
     }
 
     /** List launchable apps as [{label, packageName, component}] for the Apps zone / config. */
