@@ -10,6 +10,18 @@ the `.snplg` goes in your device's `MyStyle` folder, then
 
 ---
 
+## v2.3.4 — 2026-11-23
+
+### Fixed
+- **Debug log set to Off really writes nothing**, including the few lines at start-up, and
+  costs nothing while it is off.
+- The debug log can no longer contain a note's file path when a note can't be read.
+- **First scan with the Notes app closed is faster** (no more useless request per note).
+- **Relay tasks**: an impossible due date or a duplicated task/list in the file no longer
+  breaks the display, and the block no longer stays on "reading Relay tasks…".
+
+---
+
 ## v2.3.3 — 2026-11-23
 
 ### Fixed

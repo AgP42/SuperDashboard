@@ -60,7 +60,7 @@ export interface RelayFeed {
 export type RelayParse = {ok: true; feed: RelayFeed} | {ok: false; reason: 'bad-json' | 'bad-schema' | 'too-new'; version?: number};
 
 const str = (v: any, d = ''): string => (typeof v === 'string' ? v : d);
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 /** Parse + validate a relay-tasks.json text. Lenient on optional fields (unknown
  *  fields ignored, bad optional values dropped), strict on the envelope. Tasks
@@ -77,13 +77,17 @@ export function parseRelay(text: string): RelayParse {
   if (!Number.isFinite(ver) || ver < 1) return {ok: false, reason: 'bad-schema'};
   if (Math.floor(ver) > RELAY_MAX_VERSION) return {ok: false, reason: 'too-new', version: ver};
 
+  // Ids are used as React keys and group keys: keep the first of any duplicate.
+  const seenLists = new Set<string>();
+  const seenTasks = new Set<string>();
+  const first = (seen: Set<string>, id: string) => (seen.has(id) ? false : (seen.add(id), true));
   const lists: RelayList[] = (Array.isArray(raw.lists) ? raw.lists : [])
-    .filter((l: any) => l && typeof l.id === 'string')
+    .filter((l: any) => l && typeof l.id === 'string' && first(seenLists, l.id))
     .map((l: any, i: number) => ({id: l.id, name: str(l.name, l.id), order: typeof l.order === 'number' ? l.order : i}));
 
   const tasks: RelayTask[] = [];
   for (const t of Array.isArray(raw.tasks) ? raw.tasks : []) {
-    if (!t || typeof t.id !== 'string' || typeof t.title !== 'string') continue;
+    if (!t || typeof t.id !== 'string' || typeof t.title !== 'string' || !first(seenTasks, t.id)) continue;
     const n = t.note;
     const note: RelayNote | null =
       n && typeof n.path === 'string' && n.path
@@ -165,9 +169,13 @@ async function readText(path: string): Promise<string | null> {
 
 async function lastGood(): Promise<RelayFeed | null> {
   if (mem) return mem;
-  const t = await readText((await cacheDir()) + LAST_GOOD_FILE);
-  const p = t ? parseRelay(t) : null;
-  if (p && p.ok) mem = p.feed;
+  try {
+    const t = await readText((await cacheDir()) + LAST_GOOD_FILE);
+    const p = t ? parseRelay(t) : null;
+    if (p && p.ok) mem = p.feed;
+  } catch {
+    /* no cache dir: nothing to fall back on */
+  }
   return mem;
 }
 

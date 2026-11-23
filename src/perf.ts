@@ -122,13 +122,15 @@ function startStallWatch(ms: number): void {
   stallUntil = Date.now() + ms;
   stallTotal = 0;
   stallCount = 0;
-  if (stallTimer) return;
   lastTick = Date.now();
+  if (stallTimer) return;
   stallTimer = setInterval(() => {
     const now = Date.now();
     const gap = now - lastTick - 100;
     lastTick = now;
-    if (gap > 500) {
+    // A gap of many seconds is the view being suspended (timers pause while the
+    // dashboard is hidden), not a busy JS thread: don't report it as a stall.
+    if (gap > 500 && gap < 20000) {
       stallTotal += gap;
       stallCount++;
       const act = [...new Set(running.values())].join(', ');
@@ -162,13 +164,24 @@ function resetBridgeStats(): void {
   windowStart = Date.now();
 }
 
+let lastCallAt = 0;
+const QUIET_MS = 4000;
+
+/** Logged once nothing has crossed the bridge for 4 s (the episode went quiet).
+ *  One timer per quiet window, not one per call: a scan makes thousands. */
 function scheduleSummary(): void {
-  if (summaryTimer) clearTimeout(summaryTimer);
-  // Logged once nothing has crossed the bridge for 4 s (the episode went quiet).
-  summaryTimer = setTimeout(() => {
+  lastCallAt = Date.now();
+  if (summaryTimer) return;
+  const check = () => {
+    const left = QUIET_MS - (Date.now() - lastCallAt);
+    if (left > 0) {
+      summaryTimer = setTimeout(check, left);
+      return;
+    }
     summaryTimer = null;
     logBridgeSummary();
-  }, 4000);
+  };
+  summaryTimer = setTimeout(check, QUIET_MS);
 }
 
 /** One line per busiest method: calls, total and max ms. Totals overlap when
@@ -218,6 +231,7 @@ function wrapAll(obj: any, prefix: string, names: string[]): number {
       if (inflight > peakInflight) peakInflight = inflight;
       const done = (failed: boolean) => {
         inflight--;
+        if (!enabled) return; // debug log off: no accounting, no timers
         record(key, Date.now() - t0, failed);
         scheduleSummary();
       };

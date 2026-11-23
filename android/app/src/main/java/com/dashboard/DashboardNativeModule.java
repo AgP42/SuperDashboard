@@ -575,10 +575,33 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
     // Settings → Diagnostics → Debug log. Off = logcat only, no file. Static so
     // it holds for the whole PluginHost process; JS sets it on every config load/save.
     private static volatile boolean fileLog = true;
+    // The setting is also kept in SharedPreferences: the lines logged at process
+    // start (before JS has read config.json) must already honour "Off".
+    private static volatile boolean fileLogLoaded = false;
+    private static final String PREFS = "superdashboard";
+    private static final String PREF_FILE_LOG = "fileLog";
+
+    private void loadFileLogOnce() {
+        if (fileLogLoaded) return;
+        try {
+            fileLog = getReactApplicationContext()
+                    .getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                    .getBoolean(PREF_FILE_LOG, true);
+        } catch (Exception ignored) {
+        }
+        fileLogLoaded = true;
+    }
 
     @ReactMethod
     public void setFileLog(boolean on, Promise promise) {
         fileLog = on;
+        fileLogLoaded = true;
+        try {
+            getReactApplicationContext()
+                    .getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                    .edit().putBoolean(PREF_FILE_LOG, on).apply();
+        } catch (Exception ignored) {
+        }
         promise.resolve(true);
     }
 
@@ -587,6 +610,7 @@ public class DashboardNativeModule extends ReactContextBaseJavaModule {
         // Mirror to logcat first: it survives whatever happens to the file
         // (`adb logcat -s SuperDashboard`).
         android.util.Log.i("SuperDashboard", text);
+        loadFileLogOnce();
         if (!fileLog) {
             promise.resolve(true);
             return;

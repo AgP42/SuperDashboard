@@ -281,7 +281,7 @@ function okOrThrow(res: any, what: string): void {
 }
 
 /** Per-scan counters for the perf log (reset by ensureScanned). */
-const fileStats = {fileRead: 0, fileFail: 0, sdk: 0, refused: 0, verified: 0, mismatch: 0};
+const fileStats = {fileRead: 0, fileFail: 0, sdk: 0, refused: 0, verified: 0, mismatch: 0, verifyTries: 0};
 
 /** Compare the native file reader with the SDK on the first few notes of each
  *  scan (beta check of the reader; counts only in the log). */
@@ -296,13 +296,15 @@ async function scanFileStars(path: string, mode: LineMode, mtime: number): Promi
     pages = list.map(e => ({page: e.page, count: e.count})).sort((a, b) => a.page - b.page);
     fileStats.fileRead++;
   } catch (e: any) {
-    fileStats.fileFail++;
-    plog(`stars: file read failed (${e?.message ?? e}), using the SDK`);
+    // Reason code only, once per scan: the native message can carry the note's
+    // path, which must never reach the log (the count is in the scan summary).
+    if (++fileStats.fileFail === 1) plog(`stars: file read failed (${String(e?.code ?? 'error')}), using the SDK`);
   }
-  if (pages && fileStats.verified < VERIFY_PER_SCAN) {
-    fileStats.verified++;
+  if (pages && fileStats.verifyTries < VERIFY_PER_SCAN) {
+    fileStats.verifyTries++;
     try {
       const sdk = await sdkStarPages(path);
+      fileStats.verified++;
       const sig = (ps: StarPage[]) => ps.map(p => `${p.page}x${p.count}`).join(',');
       if (sig(pages) !== sig(sdk)) {
         fileStats.mismatch++;
@@ -310,7 +312,9 @@ async function scanFileStars(path: string, mode: LineMode, mtime: number): Promi
         plog(`stars VERIFY MISMATCH: file=${n(pages)} [${sig(pages)}] sdk=${n(sdk)} [${sig(sdk)}]`);
       }
     } catch {
-      fileStats.verified--; // SDK refused (Notes app closed): no comparison
+      // SDK refused (Notes app closed): it will refuse every note, so stop
+      // asking for the rest of this scan.
+      fileStats.verifyTries = VERIFY_PER_SCAN;
     }
   }
   if (!pages) {
@@ -394,7 +398,7 @@ async function ensureScanned(
   const mode: LineMode = need.lineMode ?? 'off';
   let lastEmit = Date.now();
   const t0 = Date.now();
-  Object.assign(fileStats, {fileRead: 0, fileFail: 0, sdk: 0, refused: 0, verified: 0, mismatch: 0});
+  Object.assign(fileStats, {fileRead: 0, fileFail: 0, sdk: 0, refused: 0, verified: 0, mismatch: 0, verifyTries: 0});
   let cached = 0;
   let starScans = 0;
   let starMs = 0;
